@@ -1303,6 +1303,47 @@ input[type="range"]::-webkit-slider-thumb {
     border: 2px solid var(--bg-card);
 }
 
+/* Protocol Verification */
+.verification-card {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(45, 212, 191, 0.05) 100%);
+}
+
+.verification-comparison {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 12px 0;
+    padding: 12px;
+    background: var(--bg-card);
+    border-radius: 8px;
+}
+
+.verification-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-width: 180px;
+    flex: 1;
+}
+
+.verification-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.verification-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.verification-value.warning {
+    color: var(--warning-color);
+}
+
 /* Footer */
 .footer {
     margin-top: 48px;

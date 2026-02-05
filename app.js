@@ -32,6 +32,144 @@ const watermarkCache = new Map();
 // Cache for historical data
 const historyCache = new Map();
 
+// Cache for protocol verification data
+const protocolApyCache = new Map();
+
+// Protocol APY sources for on-chain verification
+const PROTOCOL_APY_SOURCES = {
+    // Lido - stETH/wstETH
+    'stETH': {
+        name: 'Lido',
+        url: 'https://eth-api.lido.fi/v1/protocol/steth/apr/sma',
+        parser: (data) => parseFloat(data?.data?.smaApr || 0) / 100,
+        assets: ['stETH', 'wstETH']
+    },
+    // Rocket Pool - rETH
+    'rETH': {
+        name: 'Rocket Pool',
+        url: 'https://api.rocketpool.net/api/mainnet/payload',
+        parser: (data) => parseFloat(data?.rethAPR || 0) / 100,
+        assets: ['rETH']
+    },
+    // Ethena - sUSDe/USDe
+    'sUSDe': {
+        name: 'Ethena',
+        url: 'https://ethena.fi/api/yields/protocol-and-staking-yield',
+        parser: (data) => parseFloat(data?.stakingYield?.value || 0) / 100,
+        assets: ['sUSDe', 'USDe']
+    },
+    // EtherFi - weETH/eETH
+    'weETH': {
+        name: 'EtherFi',
+        url: 'https://www.etherfi.bid/api/etherfi/apr',
+        parser: (data) => parseFloat(data?.latest_aprs?.staking_apr || data?.apr || 0) / 100,
+        assets: ['weETH', 'eETH', 'weETHs']
+    },
+    // Frax - sfrxETH
+    'sfrxETH': {
+        name: 'Frax',
+        url: 'https://api.frax.finance/v2/frxeth/summary/latest',
+        parser: (data) => parseFloat(data?.sfrxethApr || 0) / 100,
+        assets: ['sfrxETH', 'frxETH']
+    },
+    // Coinbase - cbETH
+    'cbETH': {
+        name: 'Coinbase',
+        url: 'https://api.exchange.coinbase.com/wrapped-assets/CBETH/',
+        parser: (data) => parseFloat(data?.apy || 0),
+        assets: ['cbETH']
+    }
+};
+
+// Find protocol source for an asset
+function findProtocolSource(assetName) {
+    const upperName = (assetName || '').toUpperCase();
+    for (const [key, source] of Object.entries(PROTOCOL_APY_SOURCES)) {
+        for (const asset of source.assets) {
+            if (upperName.includes(asset.toUpperCase())) {
+                return { key, ...source };
+            }
+        }
+    }
+    return null;
+}
+
+// Fetch verified APY from protocol source
+async function fetchProtocolApy(source) {
+    if (protocolApyCache.has(source.key)) {
+        return protocolApyCache.get(source.key);
+    }
+
+    try {
+        let response = null;
+        let data = null;
+
+        // Try direct fetch first
+        try {
+            response = await fetch(source.url);
+            if (response.ok) {
+                data = await response.json();
+            }
+        } catch (e) {
+            console.log(`Direct fetch failed for ${source.name}, trying proxy...`);
+        }
+
+        // Try with CORS proxy
+        if (!data) {
+            for (const proxyFn of CORS_PROXIES) {
+                try {
+                    response = await fetch(proxyFn(source.url));
+                    if (response.ok) {
+                        data = await response.json();
+                        if (data) break;
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+        }
+
+        if (data) {
+            const apy = source.parser(data);
+            const result = { apy, source: source.name, timestamp: Date.now() };
+            protocolApyCache.set(source.key, result);
+            return result;
+        }
+    } catch (e) {
+        console.error(`Failed to fetch ${source.name} APY:`, e);
+    }
+    return null;
+}
+
+// Verify Pendle's underlying APY against protocol source
+async function verifyUnderlyingApy(market) {
+    const source = findProtocolSource(market.name);
+    if (!source) {
+        return { verified: false, reason: 'No protocol source available' };
+    }
+
+    const protocolData = await fetchProtocolApy(source);
+    if (!protocolData) {
+        return { verified: false, reason: `Could not fetch ${source.name} data` };
+    }
+
+    const pendleApy = market.underlyingApyPercent;
+    const protocolApy = protocolData.apy * 100;
+    const difference = Math.abs(pendleApy - protocolApy);
+    const percentDiff = protocolApy > 0 ? (difference / protocolApy) * 100 : 0;
+
+    return {
+        verified: true,
+        source: protocolData.source,
+        protocolApy,
+        pendleApy,
+        difference,
+        percentDiff,
+        matches: percentDiff < 10, // Within 10% is considered matching
+        timestamp: protocolData.timestamp
+    };
+}
+
 // State
 let markets = [];
 let selectedMarket = null;
@@ -1304,6 +1442,55 @@ async function loadHistoricalData(market) {
                 }
             } else {
                 correlationEl.innerHTML = `<div class="analysis-detail">ETH price data unavailable</div>`;
+            }
+        });
+    }
+
+    // 5. Protocol Verification
+    const verificationEl = document.getElementById('verification-analysis');
+    if (verificationEl) {
+        verificationEl.innerHTML = `<div class="analysis-detail">Verifying with protocol source...</div>`;
+
+        verifyUnderlyingApy(market).then(verification => {
+            if (verification.verified) {
+                const statusIcon = verification.matches ? '✅' : '⚠️';
+                const statusColor = verification.matches ? 'var(--profit-color)' : 'var(--warning-color)';
+                const statusText = verification.matches ? 'Verified' : 'Divergence detected';
+
+                verificationEl.innerHTML = `
+                    <div class="analysis-signal" style="color: ${statusColor}">
+                        <span class="signal-icon">${statusIcon}</span>
+                        <span class="signal-text">${statusText}</span>
+                    </div>
+                    <div class="verification-comparison">
+                        <div class="verification-row">
+                            <span class="verification-label">Pendle API:</span>
+                            <span class="verification-value">${formatPercent(verification.pendleApy)}</span>
+                        </div>
+                        <div class="verification-row">
+                            <span class="verification-label">${verification.source}:</span>
+                            <span class="verification-value">${formatPercent(verification.protocolApy)}</span>
+                        </div>
+                        <div class="verification-row">
+                            <span class="verification-label">Difference:</span>
+                            <span class="verification-value ${verification.matches ? '' : 'warning'}">${verification.difference.toFixed(3)}% (${verification.percentDiff.toFixed(1)}%)</span>
+                        </div>
+                    </div>
+                    <div class="analysis-detail">
+                        ${verification.matches
+                            ? `Data verified against ${verification.source}'s official API`
+                            : `Pendle data differs from ${verification.source} by ${verification.percentDiff.toFixed(1)}% - may use different calculation methods`
+                        }
+                    </div>
+                `;
+            } else {
+                verificationEl.innerHTML = `
+                    <div class="analysis-signal" style="color: var(--text-muted)">
+                        <span class="signal-icon">❓</span>
+                        <span class="signal-text">Cannot verify</span>
+                    </div>
+                    <div class="analysis-detail">${verification.reason}</div>
+                `;
             }
         });
     }
