@@ -136,10 +136,15 @@ async function fetchHistoricalData(marketAddress, chainId = 1) {
         const calcStats = (arr, field) => {
             const values = arr.map(d => (d[field] || 0) * 100).filter(v => v > 0 && v < 1000);
             if (values.length === 0) return null;
+            const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            // Calculate standard deviation for volatility
+            const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
+            const stdDev = Math.sqrt(variance);
             return {
                 min: Math.min(...values),
                 max: Math.max(...values),
-                avg: values.reduce((a, b) => a + b, 0) / values.length,
+                avg,
+                stdDev,
                 current: values[values.length - 1],
                 values: values
             };
@@ -185,6 +190,210 @@ function getYieldPosition(percentile) {
     if (percentile <= 70) return { label: 'Average', color: 'var(--text-secondary)' };
     if (percentile <= 90) return { label: 'High', color: 'var(--yt-color)' };
     return { label: 'Very High', color: 'var(--yt-color)' };
+}
+
+// Asset categories for cross-asset comparison
+const ASSET_CATEGORIES = {
+    'eth-lsd': ['stETH', 'wstETH', 'rETH', 'cbETH', 'sfrxETH', 'weETH', 'eETH', 'ezETH', 'pufETH', 'rsETH', 'mETH', 'swETH', 'ETHx', 'osETH', 'ankrETH', 'uniETH', 'agETH', 'hgETH', 'strETH', 'weETHs', 'instETH'],
+    'btc': ['WBTC', 'tBTC', 'cbBTC', 'eBTC', 'LBTC', 'solvBTC', 'pumpBTC', 'uniBTC', 'SolvBTC'],
+    'stablecoin': ['USDC', 'USDT', 'DAI', 'FRAX', 'crvUSD', 'GHO', 'LUSD', 'sUSD', 'USDD', 'sDAI', 'sUSDe', 'USDe', 'aUSDC', 'cUSDO', 'USD0', 'savUSD', 'stcUSD', 'deUSD', 'fUSDC', 'lvlUSD', 'syrupUSDC'],
+    'other': []
+};
+
+// Categorize an asset by name
+function categorizeAsset(name) {
+    const upperName = (name || '').toUpperCase();
+    for (const [category, assets] of Object.entries(ASSET_CATEGORIES)) {
+        if (category === 'other') continue;
+        for (const asset of assets) {
+            if (upperName.includes(asset.toUpperCase())) {
+                return category;
+            }
+        }
+    }
+    return 'other';
+}
+
+// Calculate mean reversion signal
+function getMeanReversionSignal(current, avg, stdDev) {
+    if (!avg || !stdDev || stdDev === 0) return null;
+    const zScore = (current - avg) / stdDev;
+
+    let signal, description, color;
+    if (zScore > 1.5) {
+        signal = 'PT Favored';
+        description = `Yield is ${zScore.toFixed(1)}σ above average. High chance of reversion down → lock in with PT`;
+        color = 'var(--pt-color)';
+    } else if (zScore > 0.5) {
+        signal = 'Slightly High';
+        description = `Yield is ${zScore.toFixed(1)}σ above average. May revert down`;
+        color = 'var(--pt-color)';
+    } else if (zScore < -1.5) {
+        signal = 'YT Favored';
+        description = `Yield is ${Math.abs(zScore).toFixed(1)}σ below average. High chance of reversion up → YT could benefit`;
+        color = 'var(--yt-color)';
+    } else if (zScore < -0.5) {
+        signal = 'Slightly Low';
+        description = `Yield is ${Math.abs(zScore).toFixed(1)}σ below average. May revert up`;
+        color = 'var(--yt-color)';
+    } else {
+        signal = 'Near Average';
+        description = 'Yield is close to historical average. No strong mean reversion signal';
+        color = 'var(--text-secondary)';
+    }
+
+    return { signal, description, color, zScore };
+}
+
+// Calculate Sharpe ratio for PT and YT strategies
+function calculateSharpeRatios(ptFixedApy, underlyingApy, impliedApy, volatility, days) {
+    // Risk-free rate assumption (approximate stablecoin yield)
+    const riskFreeRate = 3;
+
+    // PT Sharpe: fixed return with minimal volatility risk
+    // PT volatility is much lower since return is fixed at maturity
+    const ptVolatility = volatility * 0.2; // PT has ~20% of underlying volatility
+    const ptExcessReturn = ptFixedApy - riskFreeRate;
+    const ptSharpe = ptVolatility > 0 ? ptExcessReturn / ptVolatility : 0;
+
+    // YT Sharpe: leveraged exposure to yield
+    // YT volatility is amplified by leverage
+    const ytLeverage = 1 / (1 - (1 / Math.pow(1 + impliedApy / 100, days / 365)));
+    const ytVolatility = volatility * Math.min(ytLeverage, 10); // Cap leverage effect
+    const ytExpectedReturn = (underlyingApy - impliedApy) * Math.min(ytLeverage, 10); // Simplified
+    const ytExcessReturn = ytExpectedReturn - riskFreeRate;
+    const ytSharpe = ytVolatility > 0 ? ytExcessReturn / ytVolatility : 0;
+
+    return {
+        pt: { sharpe: ptSharpe, volatility: ptVolatility, excessReturn: ptExcessReturn },
+        yt: { sharpe: ytSharpe, volatility: ytVolatility, excessReturn: ytExpectedReturn }
+    };
+}
+
+// ETH price cache for correlation calculation
+let ethPriceHistory = null;
+
+// Fetch ETH price history
+async function fetchEthPriceHistory() {
+    if (ethPriceHistory) return ethPriceHistory;
+
+    try {
+        const response = await fetch('https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=90');
+        if (response.ok) {
+            const data = await response.json();
+            ethPriceHistory = data.prices.map(([timestamp, price]) => ({
+                timestamp: new Date(timestamp).toISOString().split('T')[0],
+                price
+            }));
+            return ethPriceHistory;
+        }
+    } catch (e) {
+        console.log('Failed to fetch ETH prices:', e.message);
+    }
+    return null;
+}
+
+// Calculate correlation between yield and ETH price
+function calculateCorrelation(yieldData, priceData) {
+    if (!yieldData || !priceData || yieldData.length < 10) return null;
+
+    // Align data by date
+    const priceMap = new Map(priceData.map(p => [p.timestamp, p.price]));
+    const aligned = [];
+
+    for (const point of yieldData) {
+        const date = new Date(point.timestamp).toISOString().split('T')[0];
+        const price = priceMap.get(date);
+        if (price && point.underlyingApy) {
+            aligned.push({
+                yield: point.underlyingApy * 100,
+                price
+            });
+        }
+    }
+
+    if (aligned.length < 10) return null;
+
+    // Calculate Pearson correlation
+    const n = aligned.length;
+    const sumX = aligned.reduce((s, p) => s + p.yield, 0);
+    const sumY = aligned.reduce((s, p) => s + p.price, 0);
+    const sumXY = aligned.reduce((s, p) => s + p.yield * p.price, 0);
+    const sumX2 = aligned.reduce((s, p) => s + p.yield * p.yield, 0);
+    const sumY2 = aligned.reduce((s, p) => s + p.price * p.price, 0);
+
+    const numerator = n * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+
+    if (denominator === 0) return null;
+
+    const correlation = numerator / denominator;
+
+    let interpretation, color;
+    if (correlation > 0.5) {
+        interpretation = 'Strong positive correlation with ETH. Yield likely to drop in bear markets.';
+        color = 'var(--loss-color)';
+    } else if (correlation > 0.2) {
+        interpretation = 'Moderate positive correlation with ETH.';
+        color = 'var(--text-secondary)';
+    } else if (correlation < -0.5) {
+        interpretation = 'Negative correlation with ETH. Yield may rise in bear markets (hedge).';
+        color = 'var(--profit-color)';
+    } else if (correlation < -0.2) {
+        interpretation = 'Slight negative correlation with ETH.';
+        color = 'var(--text-secondary)';
+    } else {
+        interpretation = 'Low correlation with ETH price. Yield is relatively independent.';
+        color = 'var(--text-secondary)';
+    }
+
+    return { correlation, interpretation, color };
+}
+
+// Get cross-asset comparison data
+function getCrossAssetComparison(market, allMarkets) {
+    const category = categorizeAsset(market.name);
+    if (category === 'other') return null;
+
+    const peers = allMarkets.filter(m =>
+        categorizeAsset(m.name) === category &&
+        m.address !== market.address &&
+        m.days > 7
+    );
+
+    if (peers.length < 2) return null;
+
+    const peerImpliedApys = peers.map(m => m.impliedApyPercent);
+    const avgImplied = peerImpliedApys.reduce((a, b) => a + b, 0) / peerImpliedApys.length;
+    const diff = market.impliedApyPercent - avgImplied;
+
+    const categoryLabels = {
+        'eth-lsd': 'ETH LSDs',
+        'btc': 'BTC Assets',
+        'stablecoin': 'Stablecoins'
+    };
+
+    let signal, color;
+    if (diff > 1) {
+        signal = `Higher than ${categoryLabels[category]} avg (+${formatPercent(diff)}) → PT may be cheap`;
+        color = 'var(--pt-color)';
+    } else if (diff < -1) {
+        signal = `Lower than ${categoryLabels[category]} avg (${formatPercent(diff)}) → YT may be cheap`;
+        color = 'var(--yt-color)';
+    } else {
+        signal = `In line with ${categoryLabels[category]} average`;
+        color = 'var(--text-secondary)';
+    }
+
+    return {
+        category: categoryLabels[category],
+        peerCount: peers.length,
+        avgImplied,
+        diff,
+        signal,
+        color,
+        peers: peers.slice(0, 5).map(p => ({ name: p.name, impliedApy: p.impliedApyPercent }))
+    };
 }
 
 // Check if YT is below watermark (on-chain)
@@ -967,6 +1176,123 @@ async function loadHistoricalData(market) {
         spreadLabel.textContent = 'Underlying above Implied → YT may be attractive (market underpricing yield)';
     } else {
         spreadLabel.textContent = 'Spread is tight → Market fairly priced';
+    }
+
+    // === NEW ANALYTICS ===
+
+    // 1. Mean Reversion Analysis
+    const meanReversionEl = document.getElementById('mean-reversion-analysis');
+    if (meanReversionEl && underlyingStats) {
+        const meanReversion = getMeanReversionSignal(market.underlyingApyPercent, underlyingStats.avg, underlyingStats.stdDev);
+        if (meanReversion) {
+            meanReversionEl.innerHTML = `
+                <div class="analysis-signal" style="color: ${meanReversion.color}">
+                    <span class="signal-icon">${meanReversion.zScore > 0 ? '📈' : meanReversion.zScore < 0 ? '📉' : '➡️'}</span>
+                    <span class="signal-text">${meanReversion.signal}</span>
+                </div>
+                <div class="analysis-detail">${meanReversion.description}</div>
+                <div class="analysis-stats">
+                    <span>Historical Avg: ${formatPercent(underlyingStats.avg)}</span>
+                    <span>Volatility (σ): ${formatPercent(underlyingStats.stdDev)}</span>
+                    <span>Z-Score: ${meanReversion.zScore.toFixed(2)}</span>
+                </div>
+            `;
+        }
+    }
+
+    // 2. Cross-Asset Comparison
+    const crossAssetEl = document.getElementById('cross-asset-analysis');
+    if (crossAssetEl) {
+        const comparison = getCrossAssetComparison(market, markets);
+        if (comparison) {
+            crossAssetEl.innerHTML = `
+                <div class="analysis-signal" style="color: ${comparison.color}">
+                    <span class="signal-icon">⚖️</span>
+                    <span class="signal-text">${comparison.signal}</span>
+                </div>
+                <div class="analysis-detail">
+                    Comparing to ${comparison.peerCount} other ${comparison.category} markets
+                </div>
+                <div class="peer-comparison">
+                    <div class="peer-avg">Category Avg Implied: ${formatPercent(comparison.avgImplied)}</div>
+                    <div class="peer-list">
+                        ${comparison.peers.map(p => `<span class="peer-chip">${p.name}: ${formatPercent(p.impliedApy)}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+        } else {
+            crossAssetEl.innerHTML = `<div class="analysis-detail">Not enough similar assets for comparison</div>`;
+        }
+    }
+
+    // 3. Sharpe Ratio Analysis
+    const sharpeEl = document.getElementById('sharpe-analysis');
+    if (sharpeEl && underlyingStats) {
+        const ptFixedApy = calculateFixedAPY(market.ptPrice, market.days);
+        const sharpeData = calculateSharpeRatios(
+            ptFixedApy,
+            market.underlyingApyPercent,
+            market.impliedApyPercent,
+            underlyingStats.stdDev,
+            market.days
+        );
+
+        const betterStrategy = sharpeData.pt.sharpe > sharpeData.yt.sharpe ? 'PT' : 'YT';
+        const betterColor = betterStrategy === 'PT' ? 'var(--pt-color)' : 'var(--yt-color)';
+
+        sharpeEl.innerHTML = `
+            <div class="analysis-signal" style="color: ${betterColor}">
+                <span class="signal-icon">📊</span>
+                <span class="signal-text">${betterStrategy} has better risk-adjusted return</span>
+            </div>
+            <div class="sharpe-comparison">
+                <div class="sharpe-card ${betterStrategy === 'PT' ? 'highlighted' : ''}">
+                    <div class="sharpe-label">PT Sharpe</div>
+                    <div class="sharpe-value">${sharpeData.pt.sharpe.toFixed(2)}</div>
+                    <div class="sharpe-detail">Vol: ${formatPercent(sharpeData.pt.volatility)}</div>
+                </div>
+                <div class="sharpe-card ${betterStrategy === 'YT' ? 'highlighted' : ''}">
+                    <div class="sharpe-label">YT Sharpe</div>
+                    <div class="sharpe-value">${sharpeData.yt.sharpe.toFixed(2)}</div>
+                    <div class="sharpe-detail">Vol: ${formatPercent(sharpeData.yt.volatility)}</div>
+                </div>
+            </div>
+            <div class="analysis-detail">Higher Sharpe = better risk-adjusted return (assumes 3% risk-free rate)</div>
+        `;
+    }
+
+    // 4. ETH Correlation Analysis
+    const correlationEl = document.getElementById('correlation-analysis');
+    if (correlationEl && history.rawData) {
+        // Fetch ETH prices and calculate correlation
+        fetchEthPriceHistory().then(ethPrices => {
+            if (ethPrices) {
+                const correlation = calculateCorrelation(history.rawData, ethPrices);
+                if (correlation) {
+                    correlationEl.innerHTML = `
+                        <div class="analysis-signal" style="color: ${correlation.color}">
+                            <span class="signal-icon">🔗</span>
+                            <span class="signal-text">ETH Correlation: ${correlation.correlation.toFixed(2)}</span>
+                        </div>
+                        <div class="correlation-bar">
+                            <div class="correlation-scale">
+                                <span>-1</span>
+                                <span>0</span>
+                                <span>+1</span>
+                            </div>
+                            <div class="correlation-track">
+                                <div class="correlation-marker" style="left: ${((correlation.correlation + 1) / 2) * 100}%"></div>
+                            </div>
+                        </div>
+                        <div class="analysis-detail">${correlation.interpretation}</div>
+                    `;
+                } else {
+                    correlationEl.innerHTML = `<div class="analysis-detail">Insufficient data for correlation analysis</div>`;
+                }
+            } else {
+                correlationEl.innerHTML = `<div class="analysis-detail">ETH price data unavailable</div>`;
+            }
+        });
     }
 
     // Render history chart
