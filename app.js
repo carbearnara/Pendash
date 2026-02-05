@@ -748,6 +748,43 @@ async function fetchMarkets(chainId = 1) {
             // Detect if yield is purely points-based (0 underlying but positive implied)
             const isPurePoints = underlyingApy < 0.1 && impliedApy > 1;
 
+            // Categorize zero-yield markets with explanations
+            let zeroYieldReason = null;
+            if (isPurePoints) {
+                const name = market.name?.toUpperCase() || '';
+                if (name === 'USDE') {
+                    zeroYieldReason = {
+                        type: 'raw_token',
+                        title: 'Raw Token - No Native Yield',
+                        explanation: 'Raw USDe does not generate yield. Stake to sUSDe for ~4.5% APY. Implied APY is from points speculation.'
+                    };
+                } else if (name === 'SENA') {
+                    zeroYieldReason = {
+                        type: 'governance',
+                        title: 'Governance Token Staking',
+                        explanation: 'sENA yield comes from governance rewards and points, not direct protocol yield.'
+                    };
+                } else if (name.includes('BTC') || name === 'UNIBTC') {
+                    zeroYieldReason = {
+                        type: 'raw_token',
+                        title: 'Wrapped BTC - No Native Yield',
+                        explanation: 'Wrapped BTC has no native yield. Must be lent or staked in DeFi to earn yield.'
+                    };
+                } else if (name.includes('FUSN') || name.includes('STH')) {
+                    zeroYieldReason = {
+                        type: 'data_issue',
+                        title: '⚠️ Possible Data Issue',
+                        explanation: 'This asset should have underlying yield. Data may be delayed or incorrectly reported.'
+                    };
+                } else {
+                    zeroYieldReason = {
+                        type: 'points_only',
+                        title: 'Points/Incentive Based',
+                        explanation: 'Yield is entirely from points programs or airdrops - no measurable on-chain yield.'
+                    };
+                }
+            }
+
             return {
                 ...market,
                 days,
@@ -763,7 +800,8 @@ async function fetchMarkets(chainId = 1) {
                 hasIncentives,
                 incentiveDetails,
                 lpRewardApy,
-                isPurePoints
+                isPurePoints,
+                zeroYieldReason
             };
         }).filter(m => m.days > 0);
 
@@ -873,7 +911,7 @@ function renderMarkets() {
             </div>
             <div class="market-stat">
                 <span class="stat-label">Underlying</span>
-                <span class="stat-value ${market.underlyingApyPercent > market.impliedApyPercent ? 'highlight-yt' : ''} ${market.isPurePoints ? 'pure-points' : ''}" ${market.isPurePoints ? 'title="Yield is purely from points/airdrops - no on-chain yield"' : ''}>${market.isPurePoints ? '0% 🎯' : formatPercent(market.underlyingApyPercent)}</span>
+                <span class="stat-value ${market.underlyingApyPercent > market.impliedApyPercent ? 'highlight-yt' : ''} ${market.isPurePoints ? 'pure-points' : ''}" ${market.isPurePoints && market.zeroYieldReason ? `title="${market.zeroYieldReason.title}: ${market.zeroYieldReason.explanation}"` : ''}>${market.isPurePoints ? '0% 🎯' : formatPercent(market.underlyingApyPercent)}</span>
             </div>
             <div class="market-stat">
                 <span class="stat-label">Implied</span>
@@ -986,6 +1024,15 @@ function updateCalculator() {
         signalBody.innerHTML = `<strong style="color: var(--loss-color);">⚠️ BELOW WATERMARK</strong><br>
             This YT is currently not earning yield. Exchange rate is at ${(ratio * 100).toFixed(2)}% of the watermark.
             YT holders will not receive yield until the rate recovers above the watermark.`;
+        signalBody.className = 'signal-body';
+    } else if (selectedMarket?.isPurePoints && selectedMarket?.zeroYieldReason) {
+        const reason = selectedMarket.zeroYieldReason;
+        const icon = reason.type === 'data_issue' ? '⚠️' : reason.type === 'raw_token' ? '📦' : '🎯';
+        const color = reason.type === 'data_issue' ? 'var(--loss-color)' : 'var(--warning-color)';
+        signalBody.innerHTML = `<strong style="color: ${color};">${icon} ${reason.title}</strong><br>
+            ${reason.explanation}<br><br>
+            <span style="color: var(--text-muted);">The ${formatPercent(impliedApy)} implied APY suggests the market is pricing in future value from points or incentives.
+            YT holders are speculating on airdrop/points value - high risk if expectations aren't met.</span>`;
         signalBody.className = 'signal-body';
     } else if (selectedMarket?.isPurePoints) {
         signalBody.innerHTML = `<strong style="color: var(--warning-color);">🎯 PURE POINTS MARKET</strong><br>
