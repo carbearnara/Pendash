@@ -16,6 +16,10 @@ const RPC_ENDPOINTS = {
     42161: 'https://arb1.arbitrum.io/rpc',
     8453: 'https://mainnet.base.org',
     56: 'https://bsc-dataseed.binance.org',
+    10: 'https://mainnet.optimism.io',
+    5000: 'https://rpc.mantle.xyz',
+    146: 'https://rpc.soniclabs.com',
+    998: 'https://rpc.hyperliquid.xyz/evm',
 };
 
 // Minimal ABIs for watermark checking
