@@ -374,6 +374,30 @@ async function fetchMarkets(chainId = 1) {
             // Get TVL
             const tvl = details.liquidity || details.totalTvl || market.liquidity?.usd || market.totalValueLocked || 0;
 
+            // Detect external incentives (points, airdrops, reward tokens)
+            const rewardTokens = market.rewardTokens || details.rewardTokens || [];
+            const aggregatedApy = (details.aggregatedApy || market.aggregatedApy || 0) * 100;
+            const lpRewardApy = (details.lpRewardApy || market.lpRewardApy || 0) * 100;
+            const pointMultipliers = market.pointMultipliers || details.pointMultipliers || [];
+
+            // Market has incentives if: reward tokens exist, or aggregatedApy > impliedApy, or has point multipliers
+            const hasIncentives = rewardTokens.length > 0 ||
+                                  lpRewardApy > 0.1 ||
+                                  pointMultipliers.length > 0 ||
+                                  (aggregatedApy > impliedApy + 0.5);
+
+            // Get incentive details for tooltip
+            const incentiveDetails = [];
+            if (rewardTokens.length > 0) {
+                incentiveDetails.push(`${rewardTokens.length} reward token${rewardTokens.length > 1 ? 's' : ''}`);
+            }
+            if (pointMultipliers.length > 0) {
+                incentiveDetails.push('Points campaign');
+            }
+            if (lpRewardApy > 0.1) {
+                incentiveDetails.push(`+${formatPercent(lpRewardApy)} LP rewards`);
+            }
+
             return {
                 ...market,
                 days,
@@ -385,7 +409,10 @@ async function fetchMarkets(chainId = 1) {
                 signal: getMarketSignal(underlyingApy, impliedApy),
                 tvl,
                 proName: market.name,
-                proIcon: market.icon || ''
+                proIcon: market.icon || '',
+                hasIncentives,
+                incentiveDetails,
+                lpRewardApy
             };
         }).filter(m => m.days > 0);
 
@@ -439,6 +466,10 @@ function renderMarkets() {
         filtered = filtered.filter(m => m.signal.type === 'pt');
     } else if (signalFilter === 'yt-opportunity') {
         filtered = filtered.filter(m => m.signal.type === 'yt');
+    } else if (signalFilter === 'has-incentives') {
+        filtered = filtered.filter(m => m.hasIncentives);
+    } else if (signalFilter === 'no-incentives') {
+        filtered = filtered.filter(m => !m.hasIncentives);
     } else if (signalFilter === 'below-watermark') {
         filtered = filtered.filter(m => m.watermarkStatus?.belowWatermark);
     }
@@ -474,7 +505,10 @@ function renderMarkets() {
             <div class="market-info">
                 <img class="market-icon" src="${market.proIcon || market.icon || ''}" alt="" onerror="this.style.display='none'">
                 <div class="market-details">
-                    <span class="market-name">${market.proName || market.name || 'Unknown'}</span>
+                    <span class="market-name">
+                        ${market.proName || market.name || 'Unknown'}
+                        ${market.hasIncentives ? `<span class="incentive-badge" title="${market.incentiveDetails.join(', ') || 'External incentives'}">✨</span>` : ''}
+                    </span>
                     <span class="market-expiry">${formatDate(market.expiry)} (${market.days}d)</span>
                 </div>
             </div>

@@ -398,6 +398,27 @@ body {
     color: var(--loss-color);
 }
 
+/* Incentive Badge */
+.incentive-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 6px;
+    font-size: 12px;
+    cursor: help;
+    animation: sparkle 2s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.market-name {
+    display: flex;
+    align-items: center;
+}
+
 /* Selected Market Banner */
 .selected-market-banner {
     display: flex;
