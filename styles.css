@@ -419,6 +419,12 @@ body {
     align-items: center;
 }
 
+/* Pure points indicator */
+.stat-value.pure-points {
+    color: var(--warning-color);
+    cursor: help;
+}
+
 /* Selected Market Banner */
 .selected-market-banner {
     display: flex;

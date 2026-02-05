@@ -607,6 +607,9 @@ async function fetchMarkets(chainId = 1) {
                 incentiveDetails.push(`+${formatPercent(lpRewardApy)} LP rewards`);
             }
 
+            // Detect if yield is purely points-based (0 underlying but positive implied)
+            const isPurePoints = underlyingApy < 0.1 && impliedApy > 1;
+
             return {
                 ...market,
                 days,
@@ -621,7 +624,8 @@ async function fetchMarkets(chainId = 1) {
                 proIcon: market.icon || '',
                 hasIncentives,
                 incentiveDetails,
-                lpRewardApy
+                lpRewardApy,
+                isPurePoints
             };
         }).filter(m => m.days > 0);
 
@@ -679,6 +683,10 @@ function renderMarkets() {
         filtered = filtered.filter(m => m.hasIncentives);
     } else if (signalFilter === 'no-incentives') {
         filtered = filtered.filter(m => !m.hasIncentives);
+    } else if (signalFilter === 'pure-points') {
+        filtered = filtered.filter(m => m.isPurePoints);
+    } else if (signalFilter === 'real-yield') {
+        filtered = filtered.filter(m => !m.isPurePoints && m.underlyingApyPercent > 0.5);
     } else if (signalFilter === 'below-watermark') {
         filtered = filtered.filter(m => m.watermarkStatus?.belowWatermark);
     }
@@ -727,7 +735,7 @@ function renderMarkets() {
             </div>
             <div class="market-stat">
                 <span class="stat-label">Underlying</span>
-                <span class="stat-value ${market.underlyingApyPercent > market.impliedApyPercent ? 'highlight-yt' : ''}">${formatPercent(market.underlyingApyPercent)}</span>
+                <span class="stat-value ${market.underlyingApyPercent > market.impliedApyPercent ? 'highlight-yt' : ''} ${market.isPurePoints ? 'pure-points' : ''}" ${market.isPurePoints ? 'title="Yield is purely from points/airdrops - no on-chain yield"' : ''}>${market.isPurePoints ? '0% 🎯' : formatPercent(market.underlyingApyPercent)}</span>
             </div>
             <div class="market-stat">
                 <span class="stat-label">Implied</span>
@@ -840,6 +848,11 @@ function updateCalculator() {
         signalBody.innerHTML = `<strong style="color: var(--loss-color);">⚠️ BELOW WATERMARK</strong><br>
             This YT is currently not earning yield. Exchange rate is at ${(ratio * 100).toFixed(2)}% of the watermark.
             YT holders will not receive yield until the rate recovers above the watermark.`;
+        signalBody.className = 'signal-body';
+    } else if (selectedMarket?.isPurePoints) {
+        signalBody.innerHTML = `<strong style="color: var(--warning-color);">🎯 PURE POINTS MARKET</strong><br>
+            This market has 0% on-chain yield. The ${formatPercent(impliedApy)} implied APY is entirely from points/airdrops speculation.
+            YT value depends entirely on future airdrop valuations - high risk if points don't convert to expected value.`;
         signalBody.className = 'signal-body';
     } else {
         signalBody.textContent = signal.reason;
