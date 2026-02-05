@@ -16,10 +16,9 @@ const RPC_ENDPOINTS = {
     42161: 'https://arb1.arbitrum.io/rpc',
     8453: 'https://mainnet.base.org',
     56: 'https://bsc-dataseed.binance.org',
-    10: 'https://mainnet.optimism.io',
-    5000: 'https://rpc.mantle.xyz',
     146: 'https://rpc.soniclabs.com',
-    998: 'https://rpc.hyperliquid.xyz/evm',
+    999: 'https://rpc.hyperliquid.xyz/evm',
+    9745: 'https://rpc.berachain.com',
 };
 
 // Minimal ABIs for watermark checking
@@ -849,7 +848,7 @@ async function fetchMarkets(chainId = 1) {
                     response = await fetch(proxyUrl);
                     if (response.ok) {
                         data = await response.json();
-                        if (data && (data.results || Array.isArray(data))) {
+                        if (data && (data.markets || data.results || Array.isArray(data))) {
                             console.log('Proxy succeeded!');
                             break;
                         }
@@ -864,7 +863,12 @@ async function fetchMarkets(chainId = 1) {
 
         markets = data.markets || data.results || data || [];
 
-        if (markets.length === 0) throw new Error('No markets returned');
+        // 0 markets is valid for some chains - don't fall back to sample data
+        if (markets.length === 0) {
+            marketsContainer.innerHTML = '<div class="loading">No active markets on this chain</div>';
+            refreshBtn?.classList.remove('loading');
+            return;
+        }
 
         console.log(`Loaded ${markets.length} markets`);
 
