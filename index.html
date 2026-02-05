@@ -50,9 +50,10 @@
                         <label>Sort by</label>
                         <select id="sort-filter">
                             <option value="tvl">TVL</option>
+                            <option value="bonusApr">Bonus APR</option>
+                            <option value="fixedApy">Fixed APY</option>
                             <option value="underlyingApy">Underlying APY</option>
                             <option value="impliedApy">Implied APY</option>
-                            <option value="discount">PT Discount</option>
                             <option value="expiry">Expiry</option>
                         </select>
                     </div>
@@ -75,18 +76,22 @@
                 </div>
 
                 <div class="market-legend">
-                    <div class="legend-item">
+                    <button class="legend-btn active" data-filter="pt">
                         <span class="signal-dot pt-signal"></span>
-                        <span>PT Opportunity (Implied > Underlying)</span>
-                    </div>
-                    <div class="legend-item">
+                        <span>PT Opportunity</span>
+                    </button>
+                    <button class="legend-btn active" data-filter="yt">
                         <span class="signal-dot yt-signal"></span>
-                        <span>YT Opportunity (Underlying > Implied)</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="signal-dot" style="background: var(--loss-color);"></span>
-                        <span>Below Watermark (YT not earning yield)</span>
-                    </div>
+                        <span>YT Opportunity</span>
+                    </button>
+                    <button class="legend-btn active" data-filter="neutral">
+                        <span class="signal-dot neutral-signal"></span>
+                        <span>Neutral</span>
+                    </button>
+                    <button class="legend-btn active" data-filter="watermark">
+                        <span class="signal-dot watermark-signal"></span>
+                        <span>Below Watermark</span>
+                    </button>
                 </div>
 
                 <div class="markets-container" id="markets-list">

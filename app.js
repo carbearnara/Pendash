@@ -32,6 +32,7 @@ const historyCache = new Map();
 let markets = [];
 let selectedMarket = null;
 let comparisonChart = null;
+let legendFilters = { pt: true, yt: true, neutral: true, watermark: true };
 
 // Utility functions
 function formatNumber(num, decimals = 2) {
@@ -429,7 +430,7 @@ function renderMarkets() {
 
     let filtered = [...markets];
 
-    // Filter by signal
+    // Filter by signal dropdown
     if (signalFilter === 'pt-opportunity') {
         filtered = filtered.filter(m => m.signal.type === 'pt');
     } else if (signalFilter === 'yt-opportunity') {
@@ -438,13 +439,22 @@ function renderMarkets() {
         filtered = filtered.filter(m => m.watermarkStatus?.belowWatermark);
     }
 
+    // Filter by legend buttons
+    filtered = filtered.filter(m => {
+        if (m.watermarkStatus?.belowWatermark) return legendFilters.watermark;
+        if (m.signal.type === 'pt') return legendFilters.pt;
+        if (m.signal.type === 'yt') return legendFilters.yt;
+        return legendFilters.neutral;
+    });
+
     // Sort
     filtered.sort((a, b) => {
         switch (sortBy) {
             case 'tvl': return (b.tvl || 0) - (a.tvl || 0);
+            case 'bonusApr': return (b.impliedApyPercent - b.underlyingApyPercent) - (a.impliedApyPercent - a.underlyingApyPercent);
+            case 'fixedApy': return calculateFixedAPY(b.ptPrice, b.days) - calculateFixedAPY(a.ptPrice, a.days);
             case 'underlyingApy': return b.underlyingApyPercent - a.underlyingApyPercent;
             case 'impliedApy': return b.impliedApyPercent - a.impliedApyPercent;
-            case 'discount': return b.discount - a.discount;
             case 'expiry': return a.days - b.days;
             default: return 0;
         }
@@ -477,12 +487,12 @@ function renderMarkets() {
                 <span class="stat-value ${market.impliedApyPercent > market.underlyingApyPercent ? 'highlight-pt' : ''}">${formatPercent(market.impliedApyPercent)}</span>
             </div>
             <div class="market-stat">
-                <span class="stat-label">PT Discount</span>
-                <span class="stat-value">${formatPercent(market.discount)}</span>
-            </div>
-            <div class="market-stat">
                 <span class="stat-label">Fixed APY</span>
                 <span class="stat-value positive">${formatPercent(calculateFixedAPY(market.ptPrice, market.days))}</span>
+            </div>
+            <div class="market-stat">
+                <span class="stat-label">${market.signal.type === 'pt' ? 'Bonus APR' : 'Spread'}</span>
+                <span class="stat-value ${market.impliedApyPercent > market.underlyingApyPercent ? 'highlight-pt' : market.underlyingApyPercent > market.impliedApyPercent ? 'highlight-yt' : ''}">${market.impliedApyPercent > market.underlyingApyPercent ? '+' : ''}${formatPercent(market.impliedApyPercent - market.underlyingApyPercent)}</span>
             </div>
             <div class="market-signal">
                 ${market.watermarkStatus?.belowWatermark
@@ -1111,6 +1121,16 @@ function initEventListeners() {
     document.getElementById('chain-filter')?.addEventListener('change', e => fetchMarkets(e.target.value));
     document.getElementById('sort-filter')?.addEventListener('change', renderMarkets);
     document.getElementById('signal-filter')?.addEventListener('change', renderMarkets);
+
+    // Legend filter buttons
+    document.querySelectorAll('.legend-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const filter = btn.dataset.filter;
+            legendFilters[filter] = !legendFilters[filter];
+            btn.classList.toggle('active', legendFilters[filter]);
+            renderMarkets();
+        });
+    });
     document.getElementById('refresh-markets')?.addEventListener('click', () => {
         const chainId = document.getElementById('chain-filter')?.value || 1;
         fetchMarkets(chainId);

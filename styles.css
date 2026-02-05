@@ -220,19 +220,44 @@ body {
     to { transform: rotate(360deg); }
 }
 
-/* Market Legend */
+/* Market Legend - Clickable Filter Buttons */
 .market-legend {
     display: flex;
-    gap: 24px;
+    gap: 8px;
     margin-bottom: 16px;
-    font-size: 12px;
+    flex-wrap: wrap;
 }
 
-.legend-item {
+.legend-btn {
     display: flex;
     align-items: center;
     gap: 6px;
-    color: var(--text-muted);
+    padding: 6px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.legend-btn:hover {
+    border-color: var(--border-hover);
+}
+
+.legend-btn.active {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.legend-btn:not(.active) {
+    opacity: 0.5;
+}
+
+.legend-btn:not(.active) .signal-dot {
+    opacity: 0.3;
 }
 
 .signal-dot {
@@ -243,6 +268,8 @@ body {
 
 .signal-dot.pt-signal { background: var(--pt-color); }
 .signal-dot.yt-signal { background: var(--yt-color); }
+.signal-dot.neutral-signal { background: var(--text-muted); }
+.signal-dot.watermark-signal { background: var(--loss-color); }
 
 /* Markets Container */
 .markets-container {
