@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pendash - Pendle Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="logo">
+                <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
+                    <path d="M10 16h12M16 10v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span class="logo-text">Pendash</span>
+            </div>
+            <p class="tagline">Pendle Yield Calculator</p>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab active" data-tab="markets">Live Markets</button>
+            <button class="tab" data-tab="calculator">Calculator</button>
+            <button class="tab" data-tab="compare">Strategy Compare</button>
+        </nav>
+
+        <main class="content">
+            <!-- Live Markets -->
+            <section id="markets-calculator" class="calculator-section active">
+                <div class="section-header">
+                    <h2>Live Pendle Markets</h2>
+                    <p>Real-time data from Pendle. Click a market to analyze.</p>
+                </div>
+
+                <div class="filters">
+                    <div class="filter-group">
+                        <label>Chain</label>
+                        <select id="chain-filter">
+                            <option value="1">Ethereum</option>
+                            <option value="42161">Arbitrum</option>
+                            <option value="8453">Base</option>
+                            <option value="56">BNB Chain</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Sort by</label>
+                        <select id="sort-filter">
+                            <option value="tvl">TVL</option>
+                            <option value="underlyingApy">Underlying APY</option>
+                            <option value="impliedApy">Implied APY</option>
+                            <option value="discount">PT Discount</option>
+                            <option value="expiry">Expiry</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Show</label>
+                        <select id="signal-filter">
+                            <option value="all">All Markets</option>
+                            <option value="pt-opportunity">PT Opportunities</option>
+                            <option value="yt-opportunity">YT Opportunities</option>
+                            <option value="below-watermark">Below Watermark</option>
+                        </select>
+                    </div>
+                    <button class="refresh-btn" id="refresh-markets">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 4v6h6M23 20v-6h-6"/>
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+
+                <div class="market-legend">
+                    <div class="legend-item">
+                        <span class="signal-dot pt-signal"></span>
+                        <span>PT Opportunity (Implied > Underlying)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="signal-dot yt-signal"></span>
+                        <span>YT Opportunity (Underlying > Implied)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="signal-dot" style="background: var(--loss-color);"></span>
+                        <span>Below Watermark (YT not earning yield)</span>
+                    </div>
+                </div>
+
+                <div class="markets-container" id="markets-list">
+                    <div class="loading">Loading markets...</div>
+                </div>
+            </section>
+
+            <!-- Calculator -->
+            <section id="calculator-calculator" class="calculator-section">
+                <div class="section-header">
+                    <h2>Position Calculator</h2>
+                    <p>Calculate returns for PT or YT positions</p>
+                </div>
+
+                <div class="selected-market-banner" id="selected-market-banner" style="display: none;">
+                    <div class="banner-content">
+                        <img id="banner-icon" src="" alt="" class="banner-icon">
+                        <div class="banner-info">
+                            <span class="banner-name" id="banner-name">-</span>
+                            <span class="banner-expiry" id="banner-expiry">-</span>
+                        </div>
+                    </div>
+                    <button class="banner-clear" id="clear-selection">Clear</button>
+                </div>
+
+                <div class="calculator-grid">
+                    <div class="input-card">
+                        <h3>Position Parameters</h3>
+
+                        <div class="input-group">
+                            <label for="calc-position-type">Position Type</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn active" data-type="pt">Buy PT</button>
+                                <button class="toggle-btn" data-type="yt">Buy YT</button>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="calc-pt-price">PT Price</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="calc-pt-price" value="0.95" step="0.001" min="0" max="1">
+                                <span class="input-suffix">per underlying</span>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="calc-yt-price">YT Price</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="calc-yt-price" value="0.05" step="0.001" min="0" max="1">
+                                <span class="input-suffix">per underlying</span>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="calc-days">Days to Maturity</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="calc-days" value="90" step="1" min="1" max="730">
+                                <span class="input-suffix">days</span>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="calc-underlying-apy">Underlying APY (current)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="calc-underlying-apy" value="5" step="0.1" min="0">
+                                <span class="input-suffix">%</span>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="calc-expected-apy">Expected Future APY</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="calc-expected-apy" value="5" step="0.1" min="0">
+                                <span class="input-suffix">%</span>
+                            </div>
+                            <span class="input-hint">Your prediction for average APY until maturity</span>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="calc-investment">Investment Amount</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="calc-investment" value="10000" step="100" min="0">
+                                <span class="input-suffix">USD</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="results-card">
+                        <h3>Analysis</h3>
+
+                        <div class="valuation-signal" id="valuation-signal">
+                            <div class="signal-header">
+                                <span class="signal-icon">⚖️</span>
+                                <span class="signal-title">Market Signal</span>
+                            </div>
+                            <div class="signal-body" id="signal-body">
+                                Analyzing...
+                            </div>
+                        </div>
+
+                        <div class="result-item highlight">
+                            <span class="result-label">Implied APY</span>
+                            <span class="result-value" id="calc-implied-apy">21.55%</span>
+                        </div>
+
+                        <div class="apy-comparison">
+                            <div class="apy-bar-container">
+                                <div class="apy-bar underlying-bar" id="underlying-bar"></div>
+                                <div class="apy-bar implied-bar" id="implied-bar"></div>
+                            </div>
+                            <div class="apy-labels">
+                                <span>Underlying: <strong id="underlying-label">5%</strong></span>
+                                <span>Implied: <strong id="implied-label">21.55%</strong></span>
+                            </div>
+                        </div>
+
+                        <div class="results-divider"></div>
+
+                        <div id="pt-results">
+                            <div class="result-item">
+                                <span class="result-label">Fixed APY (PT)</span>
+                                <span class="result-value" id="calc-fixed-apy">21.55%</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">PT Discount</span>
+                                <span class="result-value" id="calc-pt-discount">5.00%</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">Value at Maturity</span>
+                                <span class="result-value" id="calc-pt-maturity">$10,526.32</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">Guaranteed Profit</span>
+                                <span class="result-value profit" id="calc-pt-profit">+$526.32</span>
+                            </div>
+                        </div>
+
+                        <div id="yt-results" style="display: none;">
+                            <div class="result-item">
+                                <span class="result-label">Leverage</span>
+                                <span class="result-value" id="calc-yt-leverage">20x</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">Yield Exposure</span>
+                                <span class="result-value" id="calc-yt-exposure">$200,000</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">Break-even APY</span>
+                                <span class="result-value" id="calc-breakeven">21.55%</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">Expected Yield (net)</span>
+                                <span class="result-value" id="calc-yt-yield">$2,342.47</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">Expected P&L</span>
+                                <span class="result-value" id="calc-yt-pnl">+$1,342.47</span>
+                            </div>
+                        </div>
+
+                        <div class="results-divider"></div>
+
+                        <div class="result-item">
+                            <span class="result-label">vs Holding Underlying</span>
+                            <span class="result-value" id="calc-vs-hold">+$402.74</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Historical Yield Range -->
+                <div class="history-card" id="history-card" style="display: none;">
+                    <h3>Historical Yield Range (90 Days)</h3>
+                    <div class="history-loading" id="history-loading">Loading historical data...</div>
+                    <div class="history-content" id="history-content" style="display: none;">
+                        <div class="yield-range-section">
+                            <h4>Implied APY (YT Pricing)</h4>
+                            <div class="range-viz">
+                                <div class="range-bar">
+                                    <div class="range-fill" id="implied-range-fill"></div>
+                                    <div class="range-marker" id="implied-marker"></div>
+                                </div>
+                                <div class="range-stats">
+                                    <span class="range-min" id="implied-min">0%</span>
+                                    <span class="range-current" id="implied-current">Current: 5%</span>
+                                    <span class="range-max" id="implied-max">20%</span>
+                                </div>
+                            </div>
+                            <div class="range-info">
+                                <span class="percentile-label">Percentile: <strong id="implied-percentile">50th</strong></span>
+                                <span class="position-label" id="implied-position">Average</span>
+                            </div>
+                        </div>
+
+                        <div class="yield-range-section">
+                            <h4>Underlying APY (Realized Yield)</h4>
+                            <div class="range-viz">
+                                <div class="range-bar">
+                                    <div class="range-fill" id="underlying-range-fill"></div>
+                                    <div class="range-marker" id="underlying-marker"></div>
+                                </div>
+                                <div class="range-stats">
+                                    <span class="range-min" id="underlying-min">0%</span>
+                                    <span class="range-current" id="underlying-current">Current: 5%</span>
+                                    <span class="range-max" id="underlying-max">20%</span>
+                                </div>
+                            </div>
+                            <div class="range-info">
+                                <span class="percentile-label">Percentile: <strong id="underlying-percentile">50th</strong></span>
+                                <span class="position-label" id="underlying-position">Average</span>
+                            </div>
+                        </div>
+
+                        <div class="yield-spread-section">
+                            <h4>Implied vs Underlying Spread</h4>
+                            <div class="spread-indicator">
+                                <span class="spread-value" id="spread-value">+2.5%</span>
+                                <span class="spread-label" id="spread-label">Implied above Underlying (PT favorable)</span>
+                            </div>
+                        </div>
+
+                        <div class="history-chart-container">
+                            <h4>90-Day Yield History</h4>
+                            <canvas id="history-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h4>Understanding Valuation</h4>
+                    <div class="valuation-guide">
+                        <div class="guide-item pt-guide">
+                            <strong>PT is attractive when:</strong>
+                            <ul>
+                                <li>Implied APY > Expected future APY (lock in high rates before they drop)</li>
+                                <li>You want guaranteed returns regardless of market conditions</li>
+                                <li>You're bearish on future yield rates</li>
+                            </ul>
+                        </div>
+                        <div class="guide-item yt-guide">
+                            <strong>YT is attractive when:</strong>
+                            <ul>
+                                <li>Expected future APY > Implied APY (market underpricing yield)</li>
+                                <li>You're bullish on yield rates staying high or increasing</li>
+                                <li>You want leveraged exposure to yield</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Strategy Compare -->
+            <section id="compare-calculator" class="calculator-section">
+                <div class="section-header">
+                    <h2>Strategy Comparison</h2>
+                    <p>Compare PT vs YT vs Holding across different APY scenarios</p>
+                </div>
+
+                <div class="selected-market-banner" id="compare-market-banner" style="display: none;">
+                    <div class="banner-content">
+                        <img id="compare-banner-icon" src="" alt="" class="banner-icon">
+                        <div class="banner-info">
+                            <span class="banner-name" id="compare-banner-name">-</span>
+                            <span class="banner-expiry" id="compare-banner-expiry">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="calculator-grid wide">
+                    <div class="input-card">
+                        <h3>Scenario Parameters</h3>
+
+                        <div class="input-row">
+                            <div class="input-group">
+                                <label for="cmp-pt-price">PT Price</label>
+                                <div class="input-wrapper">
+                                    <input type="number" id="cmp-pt-price" value="0.95" step="0.001" min="0" max="1">
+                                </div>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="cmp-yt-price">YT Price</label>
+                                <div class="input-wrapper">
+                                    <input type="number" id="cmp-yt-price" value="0.05" step="0.001" min="0" max="1">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-row">
+                            <div class="input-group">
+                                <label for="cmp-days">Days to Maturity</label>
+                                <div class="input-wrapper">
+                                    <input type="number" id="cmp-days" value="90" step="1" min="1" max="730">
+                                    <span class="input-suffix">days</span>
+                                </div>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="cmp-investment">Investment</label>
+                                <div class="input-wrapper">
+                                    <input type="number" id="cmp-investment" value="10000" step="100" min="0">
+                                    <span class="input-suffix">USD</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="cmp-underlying-apy">Scenario: Future APY</label>
+                            <input type="range" id="cmp-underlying-apy" value="25" min="0" max="50" step="0.5">
+                            <div class="range-labels">
+                                <span>0%</span>
+                                <span class="range-value" id="cmp-apy-display">25%</span>
+                                <span>50%</span>
+                            </div>
+                        </div>
+
+                        <div class="breakeven-indicator">
+                            <span>Break-even APY:</span>
+                            <strong id="cmp-breakeven-apy">21.55%</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="comparison-results">
+                    <div class="comparison-card pt-card">
+                        <div class="card-header">
+                            <h4>Buy PT</h4>
+                            <span class="strategy-tag">Fixed Yield</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="main-result">
+                                <span class="label">Final Value</span>
+                                <span class="value" id="cmp-pt-final">$10,526.32</span>
+                            </div>
+                            <div class="sub-results">
+                                <div class="sub-result">
+                                    <span>Fixed APY</span>
+                                    <span id="cmp-pt-apy">21.55%</span>
+                                </div>
+                                <div class="sub-result">
+                                    <span>Profit</span>
+                                    <span class="profit" id="cmp-pt-profit">+$526.32</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <span class="verdict" id="cmp-pt-verdict">Guaranteed return</span>
+                        </div>
+                    </div>
+
+                    <div class="comparison-card yt-card">
+                        <div class="card-header">
+                            <h4>Buy YT</h4>
+                            <span class="strategy-tag">Long Yield</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="main-result">
+                                <span class="label">Final Value</span>
+                                <span class="value" id="cmp-yt-final">$11,682.19</span>
+                            </div>
+                            <div class="sub-results">
+                                <div class="sub-result">
+                                    <span>Leverage</span>
+                                    <span id="cmp-yt-leverage">20x</span>
+                                </div>
+                                <div class="sub-result">
+                                    <span>Profit</span>
+                                    <span class="profit" id="cmp-yt-profit">+$1,682.19</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <span class="verdict" id="cmp-yt-verdict">Profitable if APY > 21.55%</span>
+                        </div>
+                    </div>
+
+                    <div class="comparison-card hold-card">
+                        <div class="card-header">
+                            <h4>Hold Underlying</h4>
+                            <span class="strategy-tag">Baseline</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="main-result">
+                                <span class="label">Final Value</span>
+                                <span class="value" id="cmp-hold-final">$10,616.44</span>
+                            </div>
+                            <div class="sub-results">
+                                <div class="sub-result">
+                                    <span>Yield Earned</span>
+                                    <span id="cmp-hold-yield">$616.44</span>
+                                </div>
+                                <div class="sub-result">
+                                    <span>Period Return</span>
+                                    <span id="cmp-hold-return">6.16%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <span class="verdict" id="cmp-hold-verdict">Variable yield</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="winner-banner" id="winner-banner">
+                    <span class="winner-label">Best Strategy:</span>
+                    <span class="winner-name" id="winner-name">YT</span>
+                    <span class="winner-advantage" id="winner-advantage">+$1,155.87 vs next best</span>
+                </div>
+
+                <div class="chart-container">
+                    <h4>Returns vs Future APY</h4>
+                    <canvas id="comparison-chart"></canvas>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Data from <a href="https://app.pendle.finance" target="_blank">Pendle Finance</a> API. Calculations are estimates.</p>
+            <p class="disclaimer">Not financial advice. DYOR.</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
