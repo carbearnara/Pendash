@@ -26,8 +26,30 @@ const RPC_ENDPOINTS = {
 const SY_ABI = ['function exchangeRate() view returns (uint256)'];
 const YT_ABI = ['function pyIndexStored() view returns (uint256)', 'function SY() view returns (address)'];
 
+// Extended ABIs for detailed watermark info
+const YT_EXTENDED_ABI = [
+    'function pyIndexStored() view returns (uint256)',
+    'function SY() view returns (address)',
+    'function pyIndexCurrent() view returns (uint256)',
+    'function expiry() view returns (uint256)'
+];
+
 // Cache for watermark status
 const watermarkCache = new Map();
+
+// Cache for watermark history
+const watermarkHistoryCache = new Map();
+
+// Known historical watermark events (documented incidents)
+const KNOWN_WATERMARK_EVENTS = [
+    {
+        date: '2025-03-12',
+        asset: 'HLP',
+        event: 'Whale liquidation caused $4M loss to HLP vault',
+        impact: 'Exchange rate dropped, potential below-watermark period',
+        source: 'https://www.coindesk.com/markets/2025/03/12/hyperliquid-loses-usd4m-after-whale-s-over-usd200m-ether-trade-unwinds'
+    }
+];
 
 // Cache for historical data
 const historyCache = new Map();
@@ -168,6 +190,152 @@ async function verifyUnderlyingApy(market) {
         matches: percentDiff < 10, // Within 10% is considered matching
         timestamp: protocolData.timestamp
     };
+}
+
+// Analyze historical data for potential watermark breaches
+// When underlying APY drops significantly or goes negative, it may indicate exchange rate issues
+function analyzeWatermarkHistory(historyData, marketName) {
+    if (!historyData || !historyData.rawData || historyData.rawData.length < 2) {
+        return null;
+    }
+
+    const data = historyData.rawData;
+    const analysis = {
+        potentialBreaches: [],
+        riskPeriods: [],
+        maxDrawdown: 0,
+        volatility: historyData.underlyingApy?.last90d?.stdDev || 0,
+        knownEvents: []
+    };
+
+    // Check for known events related to this asset
+    const upperName = (marketName || '').toUpperCase();
+    for (const event of KNOWN_WATERMARK_EVENTS) {
+        if (upperName.includes(event.asset.toUpperCase())) {
+            analysis.knownEvents.push(event);
+        }
+    }
+
+    // Analyze historical underlying APY for sudden drops
+    // A significant drop in underlying APY could indicate exchange rate issues
+    let prevApy = null;
+    let cumulativeReturn = 1;
+    let peakReturn = 1;
+
+    for (let i = 0; i < data.length; i++) {
+        const point = data[i];
+        const apy = (point.underlyingApy || 0) * 100;
+        const date = point.timestamp?.split('T')[0] || '';
+
+        // Track cumulative return proxy (simplified)
+        const dailyReturn = apy / 365 / 100;
+        cumulativeReturn *= (1 + dailyReturn);
+        peakReturn = Math.max(peakReturn, cumulativeReturn);
+
+        // Calculate drawdown
+        const drawdown = (peakReturn - cumulativeReturn) / peakReturn * 100;
+        analysis.maxDrawdown = Math.max(analysis.maxDrawdown, drawdown);
+
+        if (prevApy !== null) {
+            const change = apy - prevApy;
+            const changePercent = prevApy !== 0 ? (change / prevApy) * 100 : 0;
+
+            // Flag significant negative changes (>50% drop or negative APY)
+            if (changePercent < -50 || apy < -1) {
+                analysis.potentialBreaches.push({
+                    date,
+                    previousApy: prevApy,
+                    newApy: apy,
+                    change: changePercent,
+                    severity: apy < 0 ? 'critical' : changePercent < -75 ? 'high' : 'medium'
+                });
+            }
+
+            // Flag periods of very low or negative yield
+            if (apy < 0.5 && prevApy >= 0.5) {
+                analysis.riskPeriods.push({
+                    startDate: date,
+                    apy,
+                    type: apy < 0 ? 'negative_yield' : 'near_zero_yield'
+                });
+            }
+        }
+
+        prevApy = apy;
+    }
+
+    // Determine overall watermark risk level
+    if (analysis.potentialBreaches.some(b => b.severity === 'critical') || analysis.knownEvents.length > 0) {
+        analysis.riskLevel = 'high';
+        analysis.riskColor = 'var(--loss-color)';
+    } else if (analysis.potentialBreaches.length > 0 || analysis.maxDrawdown > 5) {
+        analysis.riskLevel = 'medium';
+        analysis.riskColor = 'var(--warning-color)';
+    } else {
+        analysis.riskLevel = 'low';
+        analysis.riskColor = 'var(--profit-color)';
+    }
+
+    return analysis;
+}
+
+// Fetch on-chain watermark data for a market
+async function fetchOnChainWatermark(market, chainId) {
+    const cacheKey = `${chainId}-${market.address}`;
+    if (watermarkHistoryCache.has(cacheKey)) {
+        return watermarkHistoryCache.get(cacheKey);
+    }
+
+    try {
+        const rpcUrl = RPC_ENDPOINTS[chainId];
+        if (!rpcUrl || typeof ethers === 'undefined') {
+            return null;
+        }
+
+        // Extract addresses
+        let ytAddress = market.yt;
+        let syAddress = market.sy;
+        if (typeof ytAddress === 'string' && ytAddress.includes('-')) {
+            ytAddress = ytAddress.split('-')[1];
+        }
+        if (typeof syAddress === 'string' && syAddress.includes('-')) {
+            syAddress = syAddress.split('-')[1];
+        }
+
+        if (!ytAddress || !syAddress) return null;
+
+        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+
+        // Query YT for pyIndexStored
+        const ytContract = new ethers.Contract(ytAddress, YT_ABI, provider);
+        const pyIndexStored = await ytContract.pyIndexStored();
+
+        // Query SY for current exchange rate
+        const syContract = new ethers.Contract(syAddress, SY_ABI, provider);
+        const exchangeRate = await syContract.exchangeRate();
+
+        const pyIndexFloat = parseFloat(ethers.utils.formatUnits(pyIndexStored, 18));
+        const exchangeRateFloat = parseFloat(ethers.utils.formatUnits(exchangeRate, 18));
+
+        const ratio = pyIndexFloat > 0 ? exchangeRateFloat / pyIndexFloat : 1;
+        const belowWatermark = exchangeRateFloat < pyIndexFloat;
+        const percentFromWatermark = (ratio - 1) * 100;
+
+        const result = {
+            pyIndexStored: pyIndexFloat,
+            currentExchangeRate: exchangeRateFloat,
+            ratio,
+            belowWatermark,
+            percentFromWatermark,
+            timestamp: Date.now()
+        };
+
+        watermarkHistoryCache.set(cacheKey, result);
+        return result;
+    } catch (e) {
+        console.log(`Watermark fetch failed for ${market.name}:`, e.message);
+        return null;
+    }
 }
 
 // State
@@ -1538,6 +1706,99 @@ async function loadHistoricalData(market) {
                     </div>
                     <div class="analysis-detail">${verification.reason}</div>
                 `;
+            }
+        });
+    }
+
+    // 6. Watermark History Analysis
+    const watermarkHistoryEl = document.getElementById('watermark-history-analysis');
+    if (watermarkHistoryEl) {
+        const watermarkAnalysis = analyzeWatermarkHistory(history, market.name);
+
+        if (watermarkAnalysis) {
+            const riskIcon = watermarkAnalysis.riskLevel === 'high' ? '🚨' :
+                            watermarkAnalysis.riskLevel === 'medium' ? '⚠️' : '✅';
+
+            let eventsHtml = '';
+            if (watermarkAnalysis.knownEvents.length > 0) {
+                eventsHtml = `
+                    <div class="known-events">
+                        <strong>Known Risk Events:</strong>
+                        ${watermarkAnalysis.knownEvents.map(e => `
+                            <div class="event-item">
+                                <span class="event-date">${e.date}</span>
+                                <span class="event-desc">${e.event}</span>
+                                <a href="${e.source}" target="_blank" class="event-link">📰</a>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            let breachesHtml = '';
+            if (watermarkAnalysis.potentialBreaches.length > 0) {
+                breachesHtml = `
+                    <div class="breach-list">
+                        <strong>Detected Yield Drops:</strong>
+                        ${watermarkAnalysis.potentialBreaches.slice(0, 3).map(b => `
+                            <div class="breach-item ${b.severity}">
+                                <span class="breach-date">${b.date}</span>
+                                <span class="breach-change">${b.previousApy.toFixed(2)}% → ${b.newApy.toFixed(2)}%</span>
+                                <span class="breach-severity">${b.severity}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            watermarkHistoryEl.innerHTML = `
+                <div class="analysis-signal" style="color: ${watermarkAnalysis.riskColor}">
+                    <span class="signal-icon">${riskIcon}</span>
+                    <span class="signal-text">Watermark Risk: ${watermarkAnalysis.riskLevel.toUpperCase()}</span>
+                </div>
+                <div class="watermark-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Max Drawdown</span>
+                        <span class="stat-value">${watermarkAnalysis.maxDrawdown.toFixed(2)}%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Yield Volatility</span>
+                        <span class="stat-value">${watermarkAnalysis.volatility.toFixed(2)}%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Risk Periods</span>
+                        <span class="stat-value">${watermarkAnalysis.riskPeriods.length}</span>
+                    </div>
+                </div>
+                ${eventsHtml}
+                ${breachesHtml}
+                <div class="analysis-detail">
+                    ${watermarkAnalysis.riskLevel === 'high' ?
+                        'This asset has experienced significant yield drops or known loss events. YT holders should monitor closely.' :
+                        watermarkAnalysis.riskLevel === 'medium' ?
+                        'Some yield volatility detected. Exchange rate may have approached watermark during volatile periods.' :
+                        'No significant watermark risk detected in historical data.'}
+                </div>
+            `;
+        } else {
+            watermarkHistoryEl.innerHTML = `<div class="analysis-detail">Insufficient data for watermark analysis</div>`;
+        }
+
+        // Also try to fetch current on-chain watermark status
+        fetchOnChainWatermark(market, chainId).then(onChainData => {
+            if (onChainData) {
+                const statusEl = document.getElementById('current-watermark-status');
+                if (statusEl) {
+                    const statusIcon = onChainData.belowWatermark ? '🚨' : '✅';
+                    const statusColor = onChainData.belowWatermark ? 'var(--loss-color)' : 'var(--profit-color)';
+                    statusEl.innerHTML = `
+                        <div class="current-watermark">
+                            <span style="color: ${statusColor}">${statusIcon} ${onChainData.belowWatermark ? 'BELOW WATERMARK' : 'Above Watermark'}</span>
+                            <span class="watermark-detail">Rate: ${onChainData.currentExchangeRate.toFixed(6)} / WM: ${onChainData.pyIndexStored.toFixed(6)}</span>
+                            <span class="watermark-detail">(${onChainData.percentFromWatermark >= 0 ? '+' : ''}${onChainData.percentFromWatermark.toFixed(4)}%)</span>
+                        </div>
+                    `;
+                }
             }
         });
     }
