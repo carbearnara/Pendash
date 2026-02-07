@@ -20,7 +20,18 @@
                 </svg>
                 <span class="logo-text">Pendash</span>
             </div>
-            <p class="tagline">Pendle Yield Calculator</p>
+            <div class="header-controls">
+                <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode">
+                    <svg class="theme-icon sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg class="theme-icon moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+                <p class="tagline">Pendle Yield Calculator</p>
+            </div>
         </header>
 
         <nav class="tabs">
@@ -54,7 +65,7 @@
                         <label>Sort by</label>
                         <select id="sort-filter">
                             <option value="tvl">TVL</option>
-                            <option value="bonusApr">Bonus APR</option>
+                            <option value="lpApy">LP APY</option>
                             <option value="fixedApy">Fixed APY</option>
                             <option value="underlyingApy">Underlying APY</option>
                             <option value="impliedApy">Implied APY</option>
@@ -84,24 +95,33 @@
                 </div>
 
                 <div class="market-legend">
-                    <button class="legend-btn active" data-filter="pt">
+                    <button class="legend-btn active" data-filter="pt" title="Click to toggle, double-click to isolate">
                         <span class="signal-dot pt-signal"></span>
                         <span>PT Opportunity</span>
                     </button>
-                    <button class="legend-btn active" data-filter="yt">
+                    <button class="legend-btn active" data-filter="yt" title="Click to toggle, double-click to isolate">
                         <span class="signal-dot yt-signal"></span>
                         <span>YT Opportunity</span>
                     </button>
-                    <button class="legend-btn active" data-filter="neutral">
+                    <button class="legend-btn active" data-filter="neutral" title="Click to toggle, double-click to isolate">
                         <span class="signal-dot neutral-signal"></span>
                         <span>Neutral</span>
                     </button>
-                    <button class="legend-btn active" data-filter="watermark">
+                    <button class="legend-btn active" data-filter="watermark" title="Click to toggle, double-click to isolate">
                         <span class="signal-dot watermark-signal"></span>
                         <span>Below Watermark</span>
                     </button>
                 </div>
 
+                <div class="markets-table-header" id="markets-header">
+                    <div class="header-cell market-info-header">Asset</div>
+                    <div class="header-cell sortable" data-sort="tvl">TVL <span class="sort-arrow">↓</span></div>
+                    <div class="header-cell sortable" data-sort="underlyingApy">Underlying <span class="sort-arrow"></span></div>
+                    <div class="header-cell sortable" data-sort="impliedApy">Implied <span class="sort-arrow"></span></div>
+                    <div class="header-cell sortable" data-sort="fixedApy">Fixed APY <span class="sort-arrow"></span></div>
+                    <div class="header-cell sortable" data-sort="lpApy">LP APY <span class="sort-arrow"></span></div>
+                    <div class="header-cell">Signal</div>
+                </div>
                 <div class="markets-container" id="markets-list">
                     <div class="loading">Loading markets...</div>
                 </div>
@@ -130,10 +150,11 @@
                         <h3>Position Parameters</h3>
 
                         <div class="input-group">
-                            <label for="calc-position-type">Position Type</label>
+                            <label for="calc-position-type">Position Type <span class="help-trigger" data-tooltip="position-types">?</span></label>
                             <div class="toggle-group">
                                 <button class="toggle-btn active" data-type="pt">Buy PT</button>
                                 <button class="toggle-btn" data-type="yt">Buy YT</button>
+                                <button class="toggle-btn" data-type="lp">Provide LP</button>
                             </div>
                         </div>
 
@@ -257,6 +278,33 @@
                             <div class="result-item">
                                 <span class="result-label">Expected P&L</span>
                                 <span class="result-value" id="calc-yt-pnl">+$1,342.47</span>
+                            </div>
+                        </div>
+
+                        <div id="lp-results" style="display: none;">
+                            <div class="result-item">
+                                <span class="result-label">LP APY (Total) <span class="help-trigger" data-tooltip="lp-apy">?</span></span>
+                                <span class="result-value" id="calc-lp-apy">15.50%</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">PT Exposure</span>
+                                <span class="result-value" id="calc-lp-pt-exposure">~50%</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">Swap Fee APY</span>
+                                <span class="result-value" id="calc-lp-swap-apy">2.50%</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">Incentive APY</span>
+                                <span class="result-value" id="calc-lp-incentive-apy">5.00%</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">Expected Value</span>
+                                <span class="result-value profit" id="calc-lp-value">$10,381.64</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="result-label">IL Risk</span>
+                                <span class="result-value" id="calc-lp-il-risk">Low-Medium</span>
                             </div>
                         </div>
 
@@ -395,22 +443,30 @@
                 </div>
 
                 <div class="info-card">
-                    <h4>Understanding Valuation</h4>
-                    <div class="valuation-guide">
+                    <h4>Understanding Strategies</h4>
+                    <div class="valuation-guide three-col">
                         <div class="guide-item pt-guide">
-                            <strong>PT is attractive when:</strong>
+                            <strong>PT (Principal Token)</strong>
                             <ul>
-                                <li>Implied APY > Expected future APY (lock in high rates before they drop)</li>
-                                <li>You want guaranteed returns regardless of market conditions</li>
-                                <li>You're bearish on future yield rates</li>
+                                <li>Receive underlying at maturity for a fixed discount</li>
+                                <li>Guaranteed APY regardless of future yield changes</li>
+                                <li>Best when you expect yields to drop</li>
                             </ul>
                         </div>
                         <div class="guide-item yt-guide">
-                            <strong>YT is attractive when:</strong>
+                            <strong>YT (Yield Token)</strong>
                             <ul>
-                                <li>Expected future APY > Implied APY (market underpricing yield)</li>
-                                <li>You're bullish on yield rates staying high or increasing</li>
-                                <li>You want leveraged exposure to yield</li>
+                                <li>Receive all yield from underlying until maturity</li>
+                                <li>Leveraged exposure to yield rates</li>
+                                <li>Best when you expect yields to rise or stay high</li>
+                            </ul>
+                        </div>
+                        <div class="guide-item lp-guide">
+                            <strong>LP (Liquidity Provider)</strong>
+                            <ul>
+                                <li>Earn swap fees from PT/SY trading</li>
+                                <li>Often receive bonus incentives (PENDLE, points)</li>
+                                <li>Balanced risk: part fixed, part variable yield</li>
                             </ul>
                         </div>
                     </div>
@@ -421,7 +477,7 @@
             <section id="compare-calculator" class="calculator-section">
                 <div class="section-header">
                     <h2>Strategy Comparison</h2>
-                    <p>Compare PT vs YT vs Holding across different APY scenarios</p>
+                    <p>Compare PT vs YT vs LP vs Holding across different APY scenarios</p>
                 </div>
 
                 <div class="selected-market-banner" id="compare-market-banner" style="display: none;">
@@ -542,6 +598,32 @@
                         </div>
                     </div>
 
+                    <div class="comparison-card lp-card">
+                        <div class="card-header">
+                            <h4>Provide LP</h4>
+                            <span class="strategy-tag">Balanced</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="main-result">
+                                <span class="label">Final Value</span>
+                                <span class="value" id="cmp-lp-final">$10,450.00</span>
+                            </div>
+                            <div class="sub-results">
+                                <div class="sub-result">
+                                    <span>LP APY</span>
+                                    <span id="cmp-lp-apy">18.25%</span>
+                                </div>
+                                <div class="sub-result">
+                                    <span>Profit</span>
+                                    <span class="profit" id="cmp-lp-profit">+$450.00</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <span class="verdict" id="cmp-lp-verdict">Swap fees + PT yield</span>
+                        </div>
+                    </div>
+
                     <div class="comparison-card hold-card">
                         <div class="card-header">
                             <h4>Hold Underlying</h4>
@@ -587,6 +669,39 @@
             <p class="disclaimer">Not financial advice. DYOR.</p>
         </footer>
     </div>
+
+    <!-- Tooltip Container -->
+    <div class="tooltip-overlay" id="tooltip-overlay">
+        <div class="tooltip-content" id="tooltip-content"></div>
+    </div>
+
+    <!-- Tooltip Templates -->
+    <template id="tooltip-position-types">
+        <h4>Position Types</h4>
+        <div class="tooltip-section">
+            <strong style="color: var(--pt-color);">PT (Principal Token)</strong>
+            <p>Buy the underlying asset at a discount. At maturity, 1 PT = 1 underlying. Your profit is the discount you bought at, giving you a fixed APY.</p>
+        </div>
+        <div class="tooltip-section">
+            <strong style="color: var(--yt-color);">YT (Yield Token)</strong>
+            <p>Receive ALL yield generated by the underlying until maturity. High leverage on yield - if APY stays above break-even, you profit. If it drops, you may lose money.</p>
+        </div>
+        <div class="tooltip-section">
+            <strong style="color: var(--lp-color);">LP (Liquidity Provider)</strong>
+            <p>Deposit into PT/SY pools to earn swap fees plus incentives. You're exposed to both PT price and underlying yield. Lower risk than YT, often with bonus rewards.</p>
+        </div>
+    </template>
+
+    <template id="tooltip-lp-apy">
+        <h4>LP APY Breakdown</h4>
+        <p>Total LP APY comes from multiple sources:</p>
+        <ul>
+            <li><strong>Swap Fees:</strong> Earned from traders swapping PT ↔ SY</li>
+            <li><strong>PT Yield:</strong> Your PT portion earns its fixed yield</li>
+            <li><strong>Incentives:</strong> PENDLE emissions, partner rewards, points</li>
+        </ul>
+        <p class="tooltip-note">Note: LP position has some exposure to PT price changes (similar to impermanent loss).</p>
+    </template>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>

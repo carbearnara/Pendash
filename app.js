@@ -47,6 +47,36 @@ const KNOWN_WATERMARK_EVENTS = [
         event: 'Whale liquidation caused $4M loss to HLP vault',
         impact: 'Exchange rate dropped, potential below-watermark period',
         source: 'https://www.coindesk.com/markets/2025/03/12/hyperliquid-loses-usd4m-after-whale-s-over-usd200m-ether-trade-unwinds'
+    },
+    {
+        date: '2025-12-31',
+        asset: 'HLPe',
+        chain: 999,
+        event: 'HLPe yield dropped to 0% - 100% yield reduction',
+        impact: 'Near-zero yield period detected, likely below watermark',
+        yieldBefore: 0.60,
+        yieldAfter: 0.00,
+        source: 'Pendle historical data analysis'
+    },
+    {
+        date: '2026-01-26',
+        asset: 'hwHLP',
+        chain: 999,
+        event: 'hwHLP yield crashed 96% in single day',
+        impact: 'Yield dropped from 13.39% to 0.54%, significant exchange rate impact',
+        yieldBefore: 13.39,
+        yieldAfter: 0.54,
+        source: 'Pendle historical data analysis'
+    },
+    {
+        date: '2026-01-28',
+        asset: 'WHLP',
+        chain: 999,
+        event: 'WHLP yield crashed 75.7% followed by near-zero period',
+        impact: 'Near-zero yield period Jan 28-30, 2026. Multiple days below watermark threshold',
+        yieldBefore: 4.89,
+        yieldAfter: 1.19,
+        source: 'Pendle historical data analysis'
     }
 ];
 
@@ -209,8 +239,11 @@ function analyzeWatermarkHistory(historyData, marketName) {
 
     // Check for known events related to this asset
     const upperName = (marketName || '').toUpperCase();
+    const chainId = historyData.chainId;
     for (const event of KNOWN_WATERMARK_EVENTS) {
-        if (upperName.includes(event.asset.toUpperCase())) {
+        const assetMatch = upperName.includes(event.asset.toUpperCase());
+        const chainMatch = !event.chain || event.chain === chainId;
+        if (assetMatch && chainMatch) {
             analysis.knownEvents.push(event);
         }
     }
@@ -342,6 +375,8 @@ let markets = [];
 let selectedMarket = null;
 let comparisonChart = null;
 let legendFilters = { pt: true, yt: true, neutral: true, watermark: true };
+let sortDirection = 'desc'; // 'desc' or 'asc'
+let currentSortColumn = 'tvl';
 
 // Utility functions
 function formatNumber(num, decimals = 2) {
@@ -471,7 +506,8 @@ async function fetchHistoricalData(marketAddress, chainId = 1) {
             dataPoints: results.length,
             startDate: results[0]?.timestamp,
             endDate: results[results.length - 1]?.timestamp,
-            rawData: results.slice(-90) // Keep last 90 days for charting
+            rawData: results.slice(-90), // Keep last 90 days for charting
+            chainId: chainId
         };
 
         historyCache.set(cacheKey, history);
@@ -957,6 +993,10 @@ async function fetchMarkets(chainId = 1) {
                 }
             }
 
+            // Calculate total LP APY (swap fees + PT yield component + rewards)
+            const swapFeeApy = (details.swapFeeApy || market.swapFeeApy || 0) * 100;
+            const lpApy = aggregatedApy > 0 ? aggregatedApy : (swapFeeApy + lpRewardApy + (impliedApy * 0.5)); // Estimate if not provided
+
             return {
                 ...market,
                 days,
@@ -972,6 +1012,9 @@ async function fetchMarkets(chainId = 1) {
                 hasIncentives,
                 incentiveDetails,
                 lpRewardApy,
+                swapFeeApy,
+                lpApy,
+                aggregatedApy,
                 isPurePoints,
                 zeroYieldReason
             };
@@ -1017,7 +1060,7 @@ async function fetchMarkets(chainId = 1) {
 // Render markets list
 function renderMarkets() {
     const container = document.getElementById('markets-list');
-    const sortBy = document.getElementById('sort-filter')?.value || 'tvl';
+    const sortBy = currentSortColumn || document.getElementById('sort-filter')?.value || 'tvl';
     const signalFilter = document.getElementById('signal-filter')?.value || 'all';
 
     let filtered = [...markets];
@@ -1049,13 +1092,14 @@ function renderMarkets() {
 
     // Sort
     filtered.sort((a, b) => {
+        const dir = sortDirection === 'asc' ? 1 : -1;
         switch (sortBy) {
-            case 'tvl': return (b.tvl || 0) - (a.tvl || 0);
-            case 'bonusApr': return (b.impliedApyPercent - b.underlyingApyPercent) - (a.impliedApyPercent - a.underlyingApyPercent);
-            case 'fixedApy': return calculateFixedAPY(b.ptPrice, b.days) - calculateFixedAPY(a.ptPrice, a.days);
-            case 'underlyingApy': return b.underlyingApyPercent - a.underlyingApyPercent;
-            case 'impliedApy': return b.impliedApyPercent - a.impliedApyPercent;
-            case 'expiry': return a.days - b.days;
+            case 'tvl': return dir * ((b.tvl || 0) - (a.tvl || 0));
+            case 'lpApy': return dir * ((b.lpApy || 0) - (a.lpApy || 0));
+            case 'fixedApy': return dir * (calculateFixedAPY(b.ptPrice, b.days) - calculateFixedAPY(a.ptPrice, a.days));
+            case 'underlyingApy': return dir * (b.underlyingApyPercent - a.underlyingApyPercent);
+            case 'impliedApy': return dir * (b.impliedApyPercent - a.impliedApyPercent);
+            case 'expiry': return dir * (a.days - b.days);
             default: return 0;
         }
     });
@@ -1094,8 +1138,8 @@ function renderMarkets() {
                 <span class="stat-value positive">${formatPercent(calculateFixedAPY(market.ptPrice, market.days))}</span>
             </div>
             <div class="market-stat">
-                <span class="stat-label">${market.signal.type === 'pt' ? 'Bonus APR' : 'Spread'}</span>
-                <span class="stat-value ${market.impliedApyPercent > market.underlyingApyPercent ? 'highlight-pt' : market.underlyingApyPercent > market.impliedApyPercent ? 'highlight-yt' : ''}">${market.impliedApyPercent > market.underlyingApyPercent ? '+' : ''}${formatPercent(market.impliedApyPercent - market.underlyingApyPercent)}</span>
+                <span class="stat-label">LP APY</span>
+                <span class="stat-value ${market.lpApy > 15 ? 'highlight-lp' : ''}">${formatPercent(market.lpApy)}</span>
             </div>
             <div class="market-signal">
                 ${market.watermarkStatus?.belowWatermark
@@ -1243,6 +1287,24 @@ function updateCalculator() {
     document.getElementById('calc-yt-pnl').textContent = (ytPnl >= 0 ? '+' : '') + formatCurrency(ytPnl);
     document.getElementById('calc-yt-pnl').className = 'result-value ' + (ytPnl >= 0 ? 'profit' : 'loss');
 
+    // LP calculations
+    // LP is roughly 50% PT + 50% SY, earns swap fees + rewards
+    const lpSwapFeeApy = selectedMarket?.swapFeeApy || 2.5;
+    const lpIncentiveApy = selectedMarket?.lpRewardApy || 5;
+    const lpTotalApy = selectedMarket?.lpApy || (fixedApy * 0.5 + lpSwapFeeApy + lpIncentiveApy);
+    const lpPeriodReturn = (lpTotalApy / 100) * (days / 365);
+    const lpFinalValue = investment * (1 + lpPeriodReturn);
+
+    // IL risk assessment based on yield volatility
+    const lpIlRisk = impliedApy > 30 ? 'Medium-High' : impliedApy > 15 ? 'Low-Medium' : 'Low';
+
+    document.getElementById('calc-lp-apy').textContent = formatPercent(lpTotalApy);
+    document.getElementById('calc-lp-pt-exposure').textContent = '~50%';
+    document.getElementById('calc-lp-swap-apy').textContent = formatPercent(lpSwapFeeApy);
+    document.getElementById('calc-lp-incentive-apy').textContent = formatPercent(lpIncentiveApy);
+    document.getElementById('calc-lp-value').textContent = formatCurrency(lpFinalValue);
+    document.getElementById('calc-lp-il-risk').textContent = lpIlRisk;
+
     // Calculate holding comparison
     const holdPeriodYield = (expectedApy / 100) * (days / 365);
     const holdYield = investment * holdPeriodYield;
@@ -1250,8 +1312,10 @@ function updateCalculator() {
     let vsHold;
     if (positionType === 'pt') {
         vsHold = ptProfit - holdYield;
-    } else {
+    } else if (positionType === 'yt') {
         vsHold = ytPnl - holdYield;
+    } else {
+        vsHold = (lpFinalValue - investment) - holdYield;
     }
 
     document.getElementById('calc-vs-hold').textContent = (vsHold >= 0 ? '+' : '') + formatCurrency(vsHold);
@@ -1260,6 +1324,7 @@ function updateCalculator() {
     // Show/hide appropriate results
     document.getElementById('pt-results').style.display = positionType === 'pt' ? 'block' : 'none';
     document.getElementById('yt-results').style.display = positionType === 'yt' ? 'block' : 'none';
+    document.getElementById('lp-results').style.display = positionType === 'lp' ? 'block' : 'none';
 }
 
 // Compare calculator
@@ -1290,6 +1355,15 @@ function updateCompareCalculator() {
     const ytFinal = ytNetYield;
     const ytProfit = ytFinal - investment;
 
+    // LP Strategy
+    // LP combines ~50% PT exposure with swap fees and incentives
+    const lpSwapFeeApy = selectedMarket?.swapFeeApy || 2.5;
+    const lpIncentiveApy = selectedMarket?.lpRewardApy || 5;
+    const lpBaseApy = selectedMarket?.lpApy || (ptFixedApy * 0.5 + lpSwapFeeApy + lpIncentiveApy);
+    const lpPeriodReturn = (lpBaseApy / 100) * (days / 365);
+    const lpFinal = investment * (1 + lpPeriodReturn);
+    const lpProfit = lpFinal - investment;
+
     // Hold Strategy
     const holdPeriodYield = (futureApy / 100) * (days / 365);
     const holdYieldEarned = investment * holdPeriodYield;
@@ -1309,6 +1383,13 @@ function updateCompareCalculator() {
     document.getElementById('cmp-yt-profit').className = ytProfit >= 0 ? 'profit' : 'loss';
     document.getElementById('cmp-yt-verdict').textContent = `Profitable if APY > ${formatPercent(impliedApy)}`;
 
+    // Update LP card
+    document.getElementById('cmp-lp-final').textContent = formatCurrency(lpFinal);
+    document.getElementById('cmp-lp-apy').textContent = formatPercent(lpBaseApy);
+    document.getElementById('cmp-lp-profit').textContent = (lpProfit >= 0 ? '+' : '') + formatCurrency(lpProfit);
+    document.getElementById('cmp-lp-profit').className = lpProfit >= 0 ? 'profit' : 'loss';
+    document.getElementById('cmp-lp-verdict').textContent = 'Swap fees + PT yield + incentives';
+
     // Update Hold card
     document.getElementById('cmp-hold-final').textContent = formatCurrency(holdFinal);
     document.getElementById('cmp-hold-yield').textContent = formatCurrency(holdYieldEarned);
@@ -1318,6 +1399,7 @@ function updateCompareCalculator() {
     const strategies = [
         { name: 'PT', final: ptFinal },
         { name: 'YT', final: ytFinal },
+        { name: 'LP', final: lpFinal },
         { name: 'Hold', final: holdFinal }
     ];
     strategies.sort((a, b) => b.final - a.final);
@@ -1332,6 +1414,7 @@ function updateCompareCalculator() {
     document.querySelectorAll('.comparison-card').forEach(card => card.classList.remove('winner'));
     if (winner.name === 'PT') document.querySelector('.pt-card')?.classList.add('winner');
     if (winner.name === 'YT') document.querySelector('.yt-card')?.classList.add('winner');
+    if (winner.name === 'LP') document.querySelector('.lp-card')?.classList.add('winner');
     if (winner.name === 'Hold') document.querySelector('.hold-card')?.classList.add('winner');
 
     // Update chart
@@ -1345,6 +1428,7 @@ function updateComparisonChart(ptPrice, ytPrice, days, investment) {
     const apyRange = [];
     const ptReturns = [];
     const ytReturns = [];
+    const lpReturns = [];
     const holdReturns = [];
 
     const ptAmount = investment / ptPrice;
@@ -1353,6 +1437,11 @@ function updateComparisonChart(ptPrice, ytPrice, days, investment) {
 
     const ytLeverage = ytPrice > 0 ? 1 / ytPrice : 0;
     const ytExposure = investment * ytLeverage;
+
+    // Base LP fees and incentives (independent of APY)
+    const lpSwapFeeApy = selectedMarket?.swapFeeApy || 2.5;
+    const lpIncentiveApy = selectedMarket?.lpRewardApy || 5;
+    const lpBaseReturn = ((lpSwapFeeApy + lpIncentiveApy + ptReturnFixed * 0.5) * (days / 365));
 
     for (let apy = 0; apy <= 50; apy += 2) {
         apyRange.push(apy);
@@ -1363,6 +1452,9 @@ function updateComparisonChart(ptPrice, ytPrice, days, investment) {
         const ytNetYield = ytGrossYield * (1 - PENDLE_FEE);
         const ytReturn = ((ytNetYield - investment) / investment) * 100;
         ytReturns.push(ytReturn);
+
+        // LP return is relatively stable (slight variation with trading volume)
+        lpReturns.push(lpBaseReturn);
 
         const holdPeriodYield = (apy / 100) * (days / 365);
         const holdReturn = holdPeriodYield * 100;
@@ -1399,6 +1491,18 @@ function updateComparisonChart(ptPrice, ytPrice, days, investment) {
                     tension: 0.1,
                     pointRadius: 0,
                     pointHoverRadius: 4
+                },
+                {
+                    label: 'LP (Balanced)',
+                    data: lpReturns,
+                    borderColor: '#f472b6',
+                    backgroundColor: 'rgba(244, 114, 182, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    borderDash: [5, 5]
                 },
                 {
                     label: 'Hold Underlying',
@@ -1732,7 +1836,12 @@ async function loadHistoricalData(market) {
                             <div class="event-item">
                                 <span class="event-date">${e.date}</span>
                                 <span class="event-desc">${e.event}</span>
-                                <a href="${e.source}" target="_blank" class="event-link">📰</a>
+                                ${e.yieldBefore !== undefined ? `
+                                    <span class="event-yield">${e.yieldBefore.toFixed(2)}% → ${e.yieldAfter.toFixed(2)}%</span>
+                                ` : ''}
+                                ${e.source.startsWith('http') ?
+                                    `<a href="${e.source}" target="_blank" class="event-link">📰</a>` :
+                                    `<span class="event-source">${e.source}</span>`}
                             </div>
                         `).join('')}
                     </div>
@@ -1995,15 +2104,49 @@ function initEventListeners() {
 
     // Filters
     document.getElementById('chain-filter')?.addEventListener('change', e => fetchMarkets(e.target.value));
-    document.getElementById('sort-filter')?.addEventListener('change', renderMarkets);
+    document.getElementById('sort-filter')?.addEventListener('change', (e) => {
+        currentSortColumn = e.target.value;
+        updateSortHeaderUI();
+        renderMarkets();
+    });
     document.getElementById('signal-filter')?.addEventListener('change', renderMarkets);
 
     // Legend filter buttons
     document.querySelectorAll('.legend-btn').forEach(btn => {
+        // Single click: toggle this category
         btn.addEventListener('click', () => {
             const filter = btn.dataset.filter;
             legendFilters[filter] = !legendFilters[filter];
             btn.classList.toggle('active', legendFilters[filter]);
+            renderMarkets();
+        });
+
+        // Double click: isolate this category (show only this one)
+        btn.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            const filter = btn.dataset.filter;
+
+            // Check if this is the only active filter
+            const activeFilters = Object.entries(legendFilters).filter(([k, v]) => v);
+            const isAlreadyIsolated = activeFilters.length === 1 && activeFilters[0][0] === filter;
+
+            if (isAlreadyIsolated) {
+                // If already isolated, show all
+                Object.keys(legendFilters).forEach(key => {
+                    legendFilters[key] = true;
+                });
+            } else {
+                // Isolate: disable all, enable only this one
+                Object.keys(legendFilters).forEach(key => {
+                    legendFilters[key] = (key === filter);
+                });
+            }
+
+            // Update button states
+            document.querySelectorAll('.legend-btn').forEach(b => {
+                b.classList.toggle('active', legendFilters[b.dataset.filter]);
+            });
+
             renderMarkets();
         });
     });
@@ -2018,6 +2161,108 @@ function initEventListeners() {
         document.getElementById('selected-market-banner').style.display = 'none';
         document.getElementById('compare-market-banner').style.display = 'none';
         document.getElementById('history-card').style.display = 'none';
+    });
+
+    // Theme toggle
+    document.getElementById('theme-toggle')?.addEventListener('click', () => {
+        const html = document.documentElement;
+        const currentTheme = html.getAttribute('data-theme');
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        html.setAttribute('data-theme', newTheme);
+        localStorage.setItem('pendash-theme', newTheme);
+    });
+
+    // Load saved theme
+    const savedTheme = localStorage.getItem('pendash-theme');
+    if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+
+    // Sortable table headers
+    document.querySelectorAll('.header-cell.sortable').forEach(header => {
+        header.addEventListener('click', () => {
+            const sortKey = header.dataset.sort;
+
+            // Toggle direction if clicking same column
+            if (currentSortColumn === sortKey) {
+                sortDirection = sortDirection === 'desc' ? 'asc' : 'desc';
+            } else {
+                currentSortColumn = sortKey;
+                sortDirection = 'desc';
+            }
+
+            // Update sort dropdown to match
+            const sortFilter = document.getElementById('sort-filter');
+            if (sortFilter) {
+                sortFilter.value = sortKey;
+            }
+
+            // Update header styling
+            document.querySelectorAll('.header-cell.sortable').forEach(h => {
+                h.classList.remove('active', 'asc', 'desc');
+                h.querySelector('.sort-arrow').textContent = '';
+            });
+            header.classList.add('active', sortDirection);
+            header.querySelector('.sort-arrow').textContent = sortDirection === 'desc' ? '↓' : '↑';
+
+            renderMarkets();
+        });
+    });
+
+    // Tooltips
+    document.querySelectorAll('.help-trigger').forEach(trigger => {
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const tooltipId = trigger.dataset.tooltip;
+            showTooltip(tooltipId);
+        });
+    });
+
+    // Close tooltip on overlay click
+    document.getElementById('tooltip-overlay')?.addEventListener('click', (e) => {
+        if (e.target.id === 'tooltip-overlay') {
+            hideTooltip();
+        }
+    });
+
+    // Close tooltip on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            hideTooltip();
+        }
+    });
+}
+
+// Show tooltip
+function showTooltip(tooltipId) {
+    const template = document.getElementById(`tooltip-${tooltipId}`);
+    const overlay = document.getElementById('tooltip-overlay');
+    const content = document.getElementById('tooltip-content');
+
+    if (template && overlay && content) {
+        content.innerHTML = template.innerHTML;
+        overlay.classList.add('active');
+    }
+}
+
+// Hide tooltip
+function hideTooltip() {
+    const overlay = document.getElementById('tooltip-overlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+}
+
+// Update sort header UI to match current sort state
+function updateSortHeaderUI() {
+    document.querySelectorAll('.header-cell.sortable').forEach(h => {
+        h.classList.remove('active', 'asc', 'desc');
+        h.querySelector('.sort-arrow').textContent = '';
+
+        if (h.dataset.sort === currentSortColumn) {
+            h.classList.add('active', sortDirection);
+            h.querySelector('.sort-arrow').textContent = sortDirection === 'desc' ? '↓' : '↑';
+        }
     });
 }
 
