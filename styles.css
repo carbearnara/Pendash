@@ -1698,6 +1698,14 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* Responsive */
 @media (max-width: 1000px) {
+    /* Hide Underlying and Implied columns on medium screens */
+    .markets-table-header {
+        grid-template-columns: 2fr 1fr 1fr 1fr auto;
+    }
+    .markets-table-header .header-cell:nth-child(3),
+    .markets-table-header .header-cell:nth-child(4) {
+        display: none;
+    }
     .market-card {
         grid-template-columns: 2fr 1fr 1fr 1fr auto;
     }
@@ -1714,12 +1722,19 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 @media (max-width: 700px) {
+    /* Hide header, show compact card layout */
+    .markets-table-header { display: none; }
     .market-card {
         grid-template-columns: 1fr 1fr;
         gap: 12px;
     }
     .market-info { grid-column: 1 / -1; }
     .market-signal { grid-column: 1 / -1; justify-content: flex-start; }
+    /* Show all stats again in compact mode */
+    .market-card .market-stat:nth-child(3),
+    .market-card .market-stat:nth-child(4) {
+        display: block;
+    }
     .filters { flex-direction: column; align-items: stretch; }
     .filter-group select { width: 100%; }
     .refresh-btn { margin-left: 0; }
@@ -1733,7 +1748,6 @@ input[type="range"]::-webkit-slider-thumb {
     .header { flex-direction: column; gap: 8px; text-align: center; }
     .header-controls { justify-content: center; }
     .winner-banner { flex-direction: column; gap: 4px; }
-    .markets-table-header { display: none; }
 }
 
 /* 4-column comparison grid responsive */
@@ -1898,18 +1912,6 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* Mobile header responsive fix */
-@media (max-width: 700px) {
-    .markets-table-header {
-        grid-template-columns: 1fr 1fr 1fr;
-        padding: 8px 12px;
-    }
-    .header-cell:nth-child(3),
-    .header-cell:nth-child(4),
-    .header-cell:nth-child(5) {
-        display: none;
-    }
-}
-
 /* Toggle group with 3 buttons */
 .toggle-group {
     display: flex;
