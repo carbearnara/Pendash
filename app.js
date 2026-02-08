@@ -374,7 +374,7 @@ async function fetchOnChainWatermark(market, chainId) {
 let markets = [];
 let selectedMarket = null;
 let comparisonChart = null;
-let legendFilters = { pt: true, yt: true, neutral: true, watermark: true };
+let legendFilters = { pt: true, yt: true, lp: true, neutral: true, watermark: true };
 let sortDirection = 'desc'; // 'desc' or 'asc'
 let currentSortColumn = 'tvl';
 
@@ -1065,11 +1065,16 @@ function renderMarkets() {
 
     let filtered = [...markets];
 
+    // Helper to check if LP is the best opportunity
+    const isLpOpportunity = (m) => m.lpApy > m.underlyingApyPercent && m.lpApy > calculateFixedAPY(m.ptPrice, m.days);
+
     // Filter by signal dropdown
     if (signalFilter === 'pt-opportunity') {
         filtered = filtered.filter(m => m.signal.type === 'pt');
     } else if (signalFilter === 'yt-opportunity') {
         filtered = filtered.filter(m => m.signal.type === 'yt');
+    } else if (signalFilter === 'lp-opportunity') {
+        filtered = filtered.filter(m => isLpOpportunity(m));
     } else if (signalFilter === 'has-incentives') {
         filtered = filtered.filter(m => m.hasIncentives);
     } else if (signalFilter === 'no-incentives') {
@@ -1085,6 +1090,7 @@ function renderMarkets() {
     // Filter by legend buttons
     filtered = filtered.filter(m => {
         if (m.watermarkStatus?.belowWatermark) return legendFilters.watermark;
+        if (isLpOpportunity(m)) return legendFilters.lp;
         if (m.signal.type === 'pt') return legendFilters.pt;
         if (m.signal.type === 'yt') return legendFilters.yt;
         return legendFilters.neutral;
@@ -1139,12 +1145,14 @@ function renderMarkets() {
             </div>
             <div class="market-stat">
                 <span class="stat-label">LP APY</span>
-                <span class="stat-value ${market.lpApy > 15 ? 'highlight-lp' : ''}">${formatPercent(market.lpApy)}</span>
+                <span class="stat-value ${market.lpApy > market.underlyingApyPercent ? 'highlight-lp' : ''}" ${market.lpApy > market.underlyingApyPercent ? `title="LP yields ${formatPercent(market.lpApy - market.underlyingApyPercent)} more than holding"` : ''}>${formatPercent(market.lpApy)}${market.lpApy > market.underlyingApyPercent ? ' 💎' : ''}</span>
             </div>
             <div class="market-signal">
                 ${market.watermarkStatus?.belowWatermark
                     ? `<span class="signal-badge watermark" title="Exchange rate: ${market.watermarkStatus.ratio.toFixed(4)}x of watermark">⚠️ Below Watermark</span>`
-                    : `<span class="signal-badge ${market.signal.type}">${market.signal.label}</span>`
+                    : market.lpApy > market.underlyingApyPercent && market.lpApy > calculateFixedAPY(market.ptPrice, market.days)
+                        ? `<span class="signal-badge lp" title="LP APY beats both underlying and fixed APY">LP Best</span>`
+                        : `<span class="signal-badge ${market.signal.type}">${market.signal.label}</span>`
                 }
             </div>
         </div>

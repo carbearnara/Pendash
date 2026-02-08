@@ -342,6 +342,7 @@ body {
 
 .signal-dot.pt-signal { background: var(--pt-color); }
 .signal-dot.yt-signal { background: var(--yt-color); }
+.signal-dot.lp-signal { background: var(--lp-color); }
 .signal-dot.neutral-signal { background: var(--text-muted); }
 .signal-dot.watermark-signal { background: var(--loss-color); }
 
