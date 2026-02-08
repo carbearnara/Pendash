@@ -349,7 +349,7 @@ body {
 /* Markets Table Header */
 .markets-table-header {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 120px;
     gap: 16px;
     align-items: center;
     padding: 10px 20px;
@@ -424,7 +424,7 @@ body {
 /* Market Card - Pendle table row style */
 .market-card {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 120px;
     gap: 16px;
     align-items: center;
     padding: 16px 20px;
@@ -486,6 +486,11 @@ body {
 
 .market-stat {
     text-align: right;
+}
+
+/* Hide stat labels when header is visible (desktop) */
+.market-stat .stat-label {
+    display: none;
 }
 
 .stat-label {
@@ -1701,14 +1706,14 @@ input[type="range"]::-webkit-slider-thumb {
 @media (max-width: 1000px) {
     /* Hide Underlying and Implied columns on medium screens */
     .markets-table-header {
-        grid-template-columns: 2fr 1fr 1fr 1fr auto;
+        grid-template-columns: 2fr 1fr 1fr 1fr 120px;
     }
     .markets-table-header .header-cell:nth-child(3),
     .markets-table-header .header-cell:nth-child(4) {
         display: none;
     }
     .market-card {
-        grid-template-columns: 2fr 1fr 1fr 1fr auto;
+        grid-template-columns: 2fr 1fr 1fr 1fr 120px;
     }
     .market-card .market-stat:nth-child(3),
     .market-card .market-stat:nth-child(4) {
@@ -1734,6 +1739,10 @@ input[type="range"]::-webkit-slider-thumb {
     /* Show all stats again in compact mode */
     .market-card .market-stat:nth-child(3),
     .market-card .market-stat:nth-child(4) {
+        display: block;
+    }
+    /* Show stat labels when header is hidden */
+    .market-stat .stat-label {
         display: block;
     }
     .filters { flex-direction: column; align-items: stretch; }
