@@ -1871,34 +1871,48 @@ function updateCalculator() {
     const loopAvailable = document.getElementById('loop-available');
     const loopUnavailable = document.getElementById('loop-unavailable');
     const loopOracleSection = document.getElementById('loop-oracle-section');
+    const loopSelectPrompt = document.getElementById('loop-select-prompt');
+    const loopOracleContent = document.getElementById('loop-oracle-content');
 
-    if (loopOpportunity && positionType === 'loop') {
-        const loopPeriodReturn = (loopOpportunity.effectiveApy / 100) * (days / 365);
-        const loopFinalValue = investment * (1 + loopPeriodReturn);
-        loopProfit = loopFinalValue - investment;
-        const vsPtProfit = loopProfit - ptProfit;
-
-        document.getElementById('calc-loop-effective-apy').textContent = formatPercent(loopOpportunity.effectiveApy);
-        document.getElementById('calc-loop-base-apy').textContent = formatPercent(fixedApy);
-        document.getElementById('calc-loop-boost').textContent = '+' + formatPercent(loopOpportunity.apyBoost);
-        document.getElementById('calc-loop-platform').textContent = loopOpportunity.platform;
-        document.getElementById('calc-loop-leverage').textContent = `${(loopOpportunity.ltv * 100).toFixed(0)}% / ${loopOpportunity.safeLeverage.toFixed(2)}x`;
-        document.getElementById('calc-loop-borrow-rate').textContent = formatPercent(loopOpportunity.borrowRate);
-        document.getElementById('calc-loop-liq-buffer').textContent = loopOpportunity.liquidationBuffer.toFixed(1) + '%';
-        document.getElementById('calc-loop-value').textContent = formatCurrency(loopFinalValue);
-        document.getElementById('calc-loop-profit').textContent = '+' + formatCurrency(loopProfit);
-        document.getElementById('calc-loop-vs-pt').textContent = '+' + formatCurrency(vsPtProfit) + ' extra';
-        document.getElementById('calc-loop-vs-pt').className = 'result-value profit';
-
-        if (loopAvailable) loopAvailable.style.display = 'block';
-        if (loopUnavailable) loopUnavailable.style.display = 'none';
-
-        // Update oracle analysis
-        updateOracleAnalysis();
+    if (positionType === 'loop') {
+        // Always show oracle section when Loop PT is selected
         if (loopOracleSection) loopOracleSection.style.display = 'block';
-    } else if (positionType === 'loop') {
-        if (loopAvailable) loopAvailable.style.display = 'none';
-        if (loopUnavailable) loopUnavailable.style.display = 'block';
+
+        if (loopOpportunity) {
+            // Has loop opportunity - show content
+            const loopPeriodReturn = (loopOpportunity.effectiveApy / 100) * (days / 365);
+            const loopFinalValue = investment * (1 + loopPeriodReturn);
+            loopProfit = loopFinalValue - investment;
+            const vsPtProfit = loopProfit - ptProfit;
+
+            document.getElementById('calc-loop-effective-apy').textContent = formatPercent(loopOpportunity.effectiveApy);
+            document.getElementById('calc-loop-base-apy').textContent = formatPercent(fixedApy);
+            document.getElementById('calc-loop-boost').textContent = '+' + formatPercent(loopOpportunity.apyBoost);
+            document.getElementById('calc-loop-platform').textContent = loopOpportunity.platform;
+            document.getElementById('calc-loop-leverage').textContent = `${(loopOpportunity.ltv * 100).toFixed(0)}% / ${loopOpportunity.safeLeverage.toFixed(2)}x`;
+            document.getElementById('calc-loop-borrow-rate').textContent = formatPercent(loopOpportunity.borrowRate);
+            document.getElementById('calc-loop-liq-buffer').textContent = loopOpportunity.liquidationBuffer.toFixed(1) + '%';
+            document.getElementById('calc-loop-value').textContent = formatCurrency(loopFinalValue);
+            document.getElementById('calc-loop-profit').textContent = '+' + formatCurrency(loopProfit);
+            document.getElementById('calc-loop-vs-pt').textContent = '+' + formatCurrency(vsPtProfit) + ' extra';
+            document.getElementById('calc-loop-vs-pt').className = 'result-value profit';
+
+            if (loopAvailable) loopAvailable.style.display = 'block';
+            if (loopUnavailable) loopUnavailable.style.display = 'none';
+            if (loopSelectPrompt) loopSelectPrompt.style.display = 'none';
+            if (loopOracleContent) loopOracleContent.style.display = 'block';
+
+            // Update oracle analysis
+            updateOracleAnalysis();
+        } else {
+            // No loop opportunity - show prompt
+            if (loopAvailable) loopAvailable.style.display = 'none';
+            if (loopUnavailable) loopUnavailable.style.display = 'block';
+            if (loopSelectPrompt) loopSelectPrompt.style.display = 'block';
+            if (loopOracleContent) loopOracleContent.style.display = 'none';
+        }
+    } else {
+        // Not loop mode - hide oracle section
         if (loopOracleSection) loopOracleSection.style.display = 'none';
     }
 
@@ -3156,6 +3170,16 @@ function initEventListeners() {
         document.getElementById('loop-oracle-section').style.display = 'none';
         clearUrlMarket();
         updateCalculator();
+    });
+
+    // View loop opportunities button in oracle section
+    document.getElementById('view-loop-btn')?.addEventListener('click', () => {
+        switchTab('markets');
+        const signalFilter = document.getElementById('signal-filter');
+        if (signalFilter) {
+            signalFilter.value = 'loop-opportunity';
+            renderMarkets();
+        }
     });
 
     // Theme toggle

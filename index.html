@@ -406,6 +406,20 @@
 
                 <!-- Loop Oracle Analysis (shown when Loop PT selected) -->
                 <div class="loop-oracle-section" id="loop-oracle-section" style="display: none;">
+                    <!-- Prompt to select a market -->
+                    <div class="loop-select-prompt" id="loop-select-prompt">
+                        <div class="looping-card">
+                            <div class="loop-prompt-content">
+                                <div class="prompt-icon">🔄</div>
+                                <h3>Select a Loop Opportunity</h3>
+                                <p>To see oracle analysis and PT price history, select a market with the <span class="loop-badge-inline">Loop</span> badge from the Live Markets tab.</p>
+                                <button class="view-loop-btn" id="view-loop-btn">View Loop Opportunities</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Oracle Analysis Content -->
+                    <div class="loop-oracle-content" id="loop-oracle-content" style="display: none;">
                     <div class="looping-card oracle-card">
                         <h3>Oracle Analysis</h3>
                         <div class="oracle-header" id="oracle-header">
@@ -468,6 +482,7 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
                     </div>
                 </div>
 
