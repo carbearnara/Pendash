@@ -1191,9 +1191,9 @@ function getPendleUrls(market, chainId) {
     const chainName = getPendleChainName(chainId);
     const marketAddress = market.address;
     return {
-        pt: `https://app.pendle.finance/trade/markets/${marketAddress}/pt?chain=${chainName}`,
-        yt: `https://app.pendle.finance/trade/markets/${marketAddress}/yt?chain=${chainName}`,
-        lp: `https://app.pendle.finance/trade/pools/${marketAddress}/zap-in?chain=${chainName}`
+        pt: `https://app.pendle.finance/trade/markets/${marketAddress}?view=pt&chain=${chainName}`,
+        yt: `https://app.pendle.finance/trade/markets/${marketAddress}?view=yt&chain=${chainName}`,
+        lp: `https://app.pendle.finance/trade/markets/${marketAddress}?view=lp&chain=${chainName}`
     };
 }
 
