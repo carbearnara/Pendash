@@ -620,6 +620,55 @@ body {
     color: var(--loss-color);
 }
 
+.banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pendle-link {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+}
+
+.pendle-link.pt-link {
+    background: rgba(45, 212, 191, 0.15);
+    color: var(--pt-color);
+    border-color: var(--pt-color);
+}
+
+.pendle-link.pt-link:hover {
+    background: var(--pt-color);
+    color: var(--bg-primary);
+}
+
+.pendle-link.yt-link {
+    background: rgba(167, 139, 250, 0.15);
+    color: var(--yt-color);
+    border-color: var(--yt-color);
+}
+
+.pendle-link.yt-link:hover {
+    background: var(--yt-color);
+    color: var(--bg-primary);
+}
+
+.pendle-link.lp-link {
+    background: rgba(244, 114, 182, 0.15);
+    color: var(--lp-color);
+    border-color: var(--lp-color);
+}
+
+.pendle-link.lp-link:hover {
+    background: var(--lp-color);
+    color: var(--bg-primary);
+}
+
 /* Calculator Grid */
 .calculator-grid {
     display: grid;
@@ -1758,6 +1807,8 @@ input[type="range"]::-webkit-slider-thumb {
     .header { flex-direction: column; gap: 8px; text-align: center; }
     .header-controls { justify-content: center; }
     .winner-banner { flex-direction: column; gap: 4px; }
+    .selected-market-banner { flex-direction: column; gap: 12px; }
+    .banner-actions { flex-wrap: wrap; justify-content: center; }
 }
 
 /* 4-column comparison grid responsive */

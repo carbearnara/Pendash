@@ -1164,15 +1164,56 @@ function renderMarkets() {
             const address = card.dataset.address;
             selectedMarket = markets.find(m => m.address === address);
             if (selectedMarket) {
-                populateCalculatorFromMarket(selectedMarket);
+                const chainId = document.getElementById('chain-filter')?.value || 1;
+                populateCalculatorFromMarket(selectedMarket, chainId);
                 switchTab('calculator');
             }
         });
     });
 }
 
+// Get Pendle chain name from chain ID
+function getPendleChainName(chainId) {
+    const chainNames = {
+        1: 'ethereum',
+        42161: 'arbitrum',
+        8453: 'base',
+        56: 'bsc',
+        146: 'sonic',
+        999: 'hyperevm',
+        9745: 'berachain'
+    };
+    return chainNames[chainId] || 'ethereum';
+}
+
+// Generate Pendle trade URLs
+function getPendleUrls(market, chainId) {
+    const chainName = getPendleChainName(chainId);
+    const marketAddress = market.address;
+    return {
+        pt: `https://app.pendle.finance/trade/markets/${marketAddress}/pt?chain=${chainName}`,
+        yt: `https://app.pendle.finance/trade/markets/${marketAddress}/yt?chain=${chainName}`,
+        lp: `https://app.pendle.finance/trade/pools/${marketAddress}/zap-in?chain=${chainName}`
+    };
+}
+
+// Update URL with selected market
+function updateUrlWithMarket(market, chainId) {
+    const url = new URL(window.location);
+    url.searchParams.set('chain', chainId);
+    url.searchParams.set('market', market.address);
+    window.history.pushState({}, '', url);
+}
+
+// Clear market from URL
+function clearUrlMarket() {
+    const url = new URL(window.location);
+    url.searchParams.delete('market');
+    window.history.pushState({}, '', url);
+}
+
 // Populate calculator inputs from selected market
-function populateCalculatorFromMarket(market) {
+function populateCalculatorFromMarket(market, chainId) {
     document.getElementById('calc-pt-price').value = market.ptPrice.toFixed(4);
     document.getElementById('calc-yt-price').value = market.ytPrice.toFixed(4);
     document.getElementById('calc-days').value = market.days;
@@ -1181,6 +1222,12 @@ function populateCalculatorFromMarket(market) {
 
     // Store watermark status for display
     selectedMarket = market;
+
+    // Get current chain ID
+    const currentChainId = chainId || document.getElementById('chain-filter')?.value || 1;
+
+    // Update URL
+    updateUrlWithMarket(market, currentChainId);
 
     // Load historical data
     loadHistoricalData(market);
@@ -1199,6 +1246,12 @@ function populateCalculatorFromMarket(market) {
         document.getElementById('banner-icon').src = market.proIcon || market.icon || '';
         document.getElementById('banner-name').textContent = market.proName || market.name;
         document.getElementById('banner-expiry').textContent = `Expires ${formatDate(market.expiry)}`;
+
+        // Update Pendle trade links
+        const pendleUrls = getPendleUrls(market, currentChainId);
+        document.getElementById('pendle-pt-link').href = pendleUrls.pt;
+        document.getElementById('pendle-yt-link').href = pendleUrls.yt;
+        document.getElementById('pendle-lp-link').href = pendleUrls.lp;
     }
 
     if (compareBanner) {
@@ -2169,6 +2222,7 @@ function initEventListeners() {
         document.getElementById('selected-market-banner').style.display = 'none';
         document.getElementById('compare-market-banner').style.display = 'none';
         document.getElementById('history-card').style.display = 'none';
+        clearUrlMarket();
     });
 
     // Theme toggle
@@ -2274,14 +2328,45 @@ function updateSortHeaderUI() {
     });
 }
 
+// Load market from URL parameters
+async function loadMarketFromUrl() {
+    const url = new URL(window.location);
+    const chainId = url.searchParams.get('chain');
+    const marketAddress = url.searchParams.get('market');
+
+    if (chainId && marketAddress) {
+        // Set the chain dropdown
+        const chainFilter = document.getElementById('chain-filter');
+        if (chainFilter) {
+            chainFilter.value = chainId;
+        }
+
+        // Fetch markets for this chain and find the market
+        await fetchMarkets(chainId);
+
+        const market = markets.find(m => m.address === marketAddress);
+        if (market) {
+            populateCalculatorFromMarket(market, chainId);
+            switchTab('calculator');
+        }
+        return true;
+    }
+    return false;
+}
+
 // Initialize application
-function init() {
+async function init() {
     initTabs();
     initToggle();
     initEventListeners();
 
-    // Fetch initial markets
-    fetchMarkets(1);
+    // Check for market in URL first
+    const loadedFromUrl = await loadMarketFromUrl();
+
+    // If no market in URL, fetch default chain
+    if (!loadedFromUrl) {
+        fetchMarkets(1);
+    }
 
     // Initial calculations
     updateCalculator();
