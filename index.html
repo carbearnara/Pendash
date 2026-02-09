@@ -175,11 +175,14 @@
                 </div>
 
                 <div class="looping-content" id="looping-content">
-                    <div class="looping-select-prompt" id="looping-select-prompt">
-                        <div class="prompt-icon">🔄</div>
-                        <h3>Select a Market with Loop Opportunity</h3>
-                        <p>Click on a market with the <span class="loop-badge-example">🔄 Loop</span> badge from the Live Markets tab, or filter by "Loop Opportunities" to find eligible markets.</p>
-                        <button class="view-loop-markets-btn" id="view-loop-markets-btn">View Loop Opportunities</button>
+                    <div class="looping-opportunities-list" id="looping-opportunities-list">
+                        <div class="loop-list-header">
+                            <h3>Available Loop Opportunities</h3>
+                            <p>Click a market to see detailed analysis</p>
+                        </div>
+                        <div class="loop-markets-container" id="loop-markets-container">
+                            <div class="loading">Loading loop opportunities...</div>
+                        </div>
                     </div>
 
                     <div class="looping-details" id="looping-details" style="display: none;">
@@ -318,6 +321,10 @@
                                         <div class="chart-stat">
                                             <span class="stat-label">Volatility</span>
                                             <span class="stat-value" id="oracle-price-volatility">-</span>
+                                        </div>
+                                        <div class="chart-stat drawdown-stat">
+                                            <span class="stat-label">Max Drawdown</span>
+                                            <span class="stat-value" id="oracle-price-drawdown">-</span>
                                         </div>
                                     </div>
                                 </div>

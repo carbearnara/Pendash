@@ -1901,17 +1901,19 @@ function updateCalculator() {
 // Update looping section
 function updateLoopingSection() {
     const loopOpportunity = selectedMarket?.loopOpportunity;
-    const selectPrompt = document.getElementById('looping-select-prompt');
+    const opportunitiesList = document.getElementById('looping-opportunities-list');
     const loopingDetails = document.getElementById('looping-details');
 
     if (!selectedMarket || !loopOpportunity) {
-        if (selectPrompt) selectPrompt.style.display = 'flex';
+        if (opportunitiesList) opportunitiesList.style.display = 'block';
         if (loopingDetails) loopingDetails.style.display = 'none';
+        // Render loop opportunities list
+        renderLoopOpportunitiesList();
         return;
     }
 
-    // Show details, hide prompt
-    if (selectPrompt) selectPrompt.style.display = 'none';
+    // Show details, hide list
+    if (opportunitiesList) opportunitiesList.style.display = 'none';
     if (loopingDetails) loopingDetails.style.display = 'block';
 
     // Calculate PT fixed APY
@@ -1936,6 +1938,97 @@ function updateLoopingSection() {
 
     // Update calculator
     updateLoopCalculator();
+}
+
+// Render list of loop opportunities
+function renderLoopOpportunitiesList() {
+    const container = document.getElementById('loop-markets-container');
+    if (!container) return;
+
+    // Filter markets with loop opportunities
+    const loopMarkets = allMarkets.filter(m => m.loopOpportunity);
+
+    if (loopMarkets.length === 0) {
+        container.innerHTML = `
+            <div class="loop-empty-state">
+                <div class="empty-icon">🔄</div>
+                <h4>No Loop Opportunities Found</h4>
+                <p>Loop opportunities appear when PT markets have integrations with lending protocols like Aave or Morpho.</p>
+                <p class="empty-hint">Try selecting a different chain or check back later.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Sort by effective APY descending
+    loopMarkets.sort((a, b) => (b.loopOpportunity?.effectiveApy || 0) - (a.loopOpportunity?.effectiveApy || 0));
+
+    container.innerHTML = loopMarkets.map(market => {
+        const loop = market.loopOpportunity;
+        const ptFixedApy = calculateFixedAPY(market.ptPrice, market.days);
+        const expiryDate = new Date(Date.now() + market.days * 24 * 60 * 60 * 1000);
+        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        // Get oracle info
+        const marketName = (market.name || market.proName || '').toUpperCase();
+        let oracleStability = 'unknown';
+        for (const [assetName, pairData] of Object.entries(KNOWN_PT_LENDING_PAIRS)) {
+            if (marketName.includes(assetName.toUpperCase()) && pairData.oracle) {
+                oracleStability = pairData.oracle.stability;
+                break;
+            }
+        }
+        const stabilityInfo = ORACLE_STABILITY_INFO[oracleStability] || { icon: '?', label: 'Unknown' };
+
+        return `
+            <div class="loop-market-card" data-address="${market.address}">
+                <div class="loop-market-info">
+                    <img src="${market.icon || ''}" alt="" class="loop-market-icon" onerror="this.style.display='none'">
+                    <div class="loop-market-details">
+                        <span class="loop-market-name">${market.name || market.proName}</span>
+                        <span class="loop-market-expiry">Expires ${expiryStr}</span>
+                    </div>
+                </div>
+                <div class="loop-market-metrics">
+                    <div class="loop-market-metric">
+                        <span class="metric-label">Effective APY</span>
+                        <span class="metric-value highlight">${formatPercent(loop.effectiveApy)}</span>
+                    </div>
+                    <div class="loop-market-metric">
+                        <span class="metric-label">Base APY</span>
+                        <span class="metric-value">${formatPercent(ptFixedApy)}</span>
+                    </div>
+                    <div class="loop-market-metric">
+                        <span class="metric-label">APY Boost</span>
+                        <span class="metric-value boost">+${formatPercent(loop.apyBoost)}</span>
+                    </div>
+                    <div class="loop-market-metric">
+                        <span class="metric-label">Platform</span>
+                        <span class="metric-value">${loop.platform}</span>
+                    </div>
+                    <div class="loop-market-metric">
+                        <span class="metric-label">LTV</span>
+                        <span class="metric-value">${(loop.ltv * 100).toFixed(0)}%</span>
+                    </div>
+                    <div class="loop-market-metric">
+                        <span class="metric-label">Oracle</span>
+                        <span class="metric-value oracle-${oracleStability}">${stabilityInfo.icon} ${stabilityInfo.label}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Add click handlers
+    container.querySelectorAll('.loop-market-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const address = card.dataset.address;
+            const market = allMarkets.find(m => m.address === address);
+            if (market) {
+                selectMarket(market);
+            }
+        });
+    });
 }
 
 // Update oracle analysis section
@@ -2097,11 +2190,26 @@ async function fetchAndRenderOraclePriceChart() {
         const stdDev = Math.sqrt(variance);
         const volatility = (stdDev / avgPrice) * 100; // Coefficient of variation as percentage
 
+        // Calculate maximum drawdown (largest peak-to-trough decline)
+        let maxDrawdown = 0;
+        let peak = prices[0];
+        for (let i = 1; i < prices.length; i++) {
+            if (prices[i] > peak) {
+                peak = prices[i];
+            }
+            const drawdown = (peak - prices[i]) / peak;
+            if (drawdown > maxDrawdown) {
+                maxDrawdown = drawdown;
+            }
+        }
+        const maxDrawdownPercent = maxDrawdown * 100;
+
         // Update stats display
         document.getElementById('oracle-price-current').textContent = currentPrice.toFixed(4);
         document.getElementById('oracle-price-min').textContent = minPrice.toFixed(4);
         document.getElementById('oracle-price-max').textContent = maxPrice.toFixed(4);
         document.getElementById('oracle-price-volatility').textContent = volatility.toFixed(2) + '%';
+        document.getElementById('oracle-price-drawdown').textContent = '-' + maxDrawdownPercent.toFixed(2) + '%';
 
         // Color volatility based on risk
         const volatilityEl = document.getElementById('oracle-price-volatility');
@@ -2113,6 +2221,19 @@ async function fetchAndRenderOraclePriceChart() {
             volatilityEl.style.color = 'var(--warning-color)';
         } else {
             volatilityEl.style.color = 'var(--loss-color)';
+        }
+
+        // Color max drawdown based on risk (relative to LTV buffer)
+        const drawdownEl = document.getElementById('oracle-price-drawdown');
+        const ltvBuffer = selectedMarket?.loopOpportunity?.liquidationBuffer || 10;
+        if (maxDrawdownPercent < ltvBuffer * 0.3) {
+            drawdownEl.style.color = 'var(--profit-color)';
+        } else if (maxDrawdownPercent < ltvBuffer * 0.5) {
+            drawdownEl.style.color = 'var(--pt-color)';
+        } else if (maxDrawdownPercent < ltvBuffer * 0.8) {
+            drawdownEl.style.color = 'var(--warning-color)';
+        } else {
+            drawdownEl.style.color = 'var(--loss-color)';
         }
 
         // Render chart
