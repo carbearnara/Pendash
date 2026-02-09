@@ -404,50 +404,121 @@ const KNOWN_PT_LENDING_PAIRS = {
         ltv: 0.915,
         borrowRate: 5.5,
         borrowAsset: 'USDC',
-        chains: [1]
+        chains: [1],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle with TWAP pricing. Price converges to 1 at maturity.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
     },
     'eUSDe': {
         platform: 'Morpho Blue',
         ltv: 0.86,
         borrowRate: 5.2,
         borrowAsset: 'USDC',
-        chains: [1]
+        chains: [1],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle with TWAP pricing. Price converges to 1 at maturity.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
     },
     'USDe': {
         platform: 'Morpho Blue',
         ltv: 0.77,
         borrowRate: 5.0,
         borrowAsset: 'USDC',
-        chains: [1]
+        chains: [1],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle with TWAP pricing. Price converges to 1 at maturity.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
     },
     'wstETH': {
         platform: 'Aave V3',
         ltv: 0.80,
         borrowRate: 2.5,
         borrowAsset: 'WETH',
-        chains: [1, 42161]
+        chains: [1, 42161],
+        oracle: {
+            type: 'Chainlink',
+            provider: 'Chainlink',
+            description: 'Uses Chainlink price feed for wstETH/ETH. Well-established, battle-tested oracle.',
+            stability: 'very-high',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'very-low'
+        }
     },
     'weETH': {
         platform: 'Aave V3',
         ltv: 0.725,
         borrowRate: 2.8,
         borrowAsset: 'WETH',
-        chains: [1, 42161]
+        chains: [1, 42161],
+        oracle: {
+            type: 'Chainlink',
+            provider: 'Chainlink',
+            description: 'Uses Chainlink price feed for weETH/ETH. Established oracle with good coverage.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'low'
+        }
     },
     'ezETH': {
         platform: 'Morpho Blue',
         ltv: 0.77,
         borrowRate: 3.0,
         borrowAsset: 'WETH',
-        chains: [1]
+        chains: [1],
+        oracle: {
+            type: 'Redstone',
+            provider: 'Redstone',
+            description: 'Uses Redstone oracle for ezETH pricing. Newer oracle, moderate track record.',
+            stability: 'medium',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'medium'
+        }
     },
     'rsETH': {
         platform: 'Morpho Blue',
         ltv: 0.77,
         borrowRate: 3.2,
         borrowAsset: 'WETH',
-        chains: [1]
+        chains: [1],
+        oracle: {
+            type: 'Redstone',
+            provider: 'Redstone',
+            description: 'Uses Redstone oracle for rsETH pricing. Newer oracle, moderate track record.',
+            stability: 'medium',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'medium'
+        }
     },
+};
+
+// Oracle stability ratings explanation
+const ORACLE_STABILITY_INFO = {
+    'very-high': { label: 'Very Stable', color: 'var(--profit-color)', icon: '🛡️', description: 'Battle-tested oracle with long history of stability' },
+    'high': { label: 'Stable', color: 'var(--pt-color)', icon: '✅', description: 'Reliable oracle with TWAP or established price feeds' },
+    'medium': { label: 'Moderate', color: 'var(--warning-color)', icon: '⚠️', description: 'Newer oracle or less established price source' },
+    'low': { label: 'Volatile', color: 'var(--loss-color)', icon: '🚨', description: 'Spot price oracle susceptible to manipulation' }
 };
 
 // Calculate loop strategy metrics
@@ -1860,8 +1931,114 @@ function updateLoopingSection() {
     document.getElementById('loop-max-leverage').textContent = loopOpportunity.maxLeverage.toFixed(2) + 'x';
     document.getElementById('loop-liq-buffer').textContent = loopOpportunity.liquidationBuffer.toFixed(1) + '%';
 
+    // Update oracle analysis
+    updateOracleAnalysis();
+
     // Update calculator
     updateLoopCalculator();
+}
+
+// Update oracle analysis section
+function updateOracleAnalysis() {
+    const marketName = (selectedMarket?.name || selectedMarket?.proName || '').toUpperCase();
+    let oracleData = null;
+
+    // Find oracle data from known pairs
+    for (const [assetName, pairData] of Object.entries(KNOWN_PT_LENDING_PAIRS)) {
+        if (marketName.includes(assetName.toUpperCase()) && pairData.oracle) {
+            oracleData = pairData.oracle;
+            break;
+        }
+    }
+
+    const oracleIcon = document.getElementById('oracle-icon');
+    const oracleType = document.getElementById('oracle-type');
+    const oracleProvider = document.getElementById('oracle-provider');
+    const oracleStabilityBadge = document.getElementById('oracle-stability-badge');
+    const oracleDescription = document.getElementById('oracle-description');
+    const oraclePriceType = document.getElementById('oracle-price-type');
+    const oracleTwapWindow = document.getElementById('oracle-twap-window');
+    const oracleStabilityRating = document.getElementById('oracle-stability-rating');
+    const oracleRiskLevel = document.getElementById('oracle-risk-level');
+    const oracleRiskSummary = document.getElementById('oracle-risk-summary');
+
+    if (!oracleData) {
+        // No oracle data available
+        oracleIcon.textContent = '?';
+        oracleType.textContent = 'Unknown Oracle';
+        oracleProvider.textContent = 'Provider: Not verified';
+        oracleStabilityBadge.textContent = 'Unverified';
+        oracleStabilityBadge.className = 'oracle-stability-badge unknown';
+        oracleDescription.textContent = 'Oracle data not available for this market. Exercise caution with unverified oracles.';
+        oraclePriceType.textContent = 'Unknown';
+        oracleTwapWindow.textContent = '-';
+        oracleStabilityRating.textContent = '-';
+        oracleRiskLevel.textContent = '-';
+        oracleRiskSummary.innerHTML = '<span class="risk-icon">⚠️</span><span class="risk-text">Unable to verify oracle - proceed with caution</span>';
+        oracleRiskSummary.className = 'oracle-risk-summary warning';
+        return;
+    }
+
+    // Get stability info
+    const stabilityInfo = ORACLE_STABILITY_INFO[oracleData.stability] || ORACLE_STABILITY_INFO['medium'];
+
+    // Populate oracle data
+    oracleIcon.textContent = stabilityInfo.icon;
+    oracleType.textContent = oracleData.type;
+    oracleProvider.textContent = `Provider: ${oracleData.provider}`;
+
+    // Set stability badge
+    oracleStabilityBadge.textContent = stabilityInfo.label;
+    oracleStabilityBadge.className = `oracle-stability-badge ${oracleData.stability}`;
+    oracleStabilityBadge.style.color = stabilityInfo.color;
+
+    oracleDescription.textContent = oracleData.description;
+
+    // Price type (TWAP vs Spot)
+    const isTwap = oracleData.type.includes('TWAP') || oracleData.twapWindow !== 'N/A';
+    oraclePriceType.textContent = isTwap ? 'TWAP (Time-Weighted)' : 'Spot Price';
+    oraclePriceType.className = `metric-value ${isTwap ? 'twap' : 'spot'}`;
+
+    // TWAP window
+    oracleTwapWindow.textContent = oracleData.twapWindow || 'N/A';
+
+    // Stability rating
+    oracleStabilityRating.textContent = stabilityInfo.label;
+    oracleStabilityRating.style.color = stabilityInfo.color;
+
+    // Risk level
+    const riskColors = {
+        'very-low': 'var(--profit-color)',
+        'low': 'var(--pt-color)',
+        'medium': 'var(--warning-color)',
+        'high': 'var(--loss-color)'
+    };
+    oracleRiskLevel.textContent = oracleData.riskLevel.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    oracleRiskLevel.style.color = riskColors[oracleData.riskLevel] || 'var(--text-primary)';
+
+    // Risk summary
+    let riskSummaryClass = 'oracle-risk-summary';
+    let riskIcon = '';
+    let riskText = '';
+
+    if (oracleData.stability === 'very-high' || oracleData.stability === 'high') {
+        riskIcon = stabilityInfo.icon;
+        riskText = isTwap
+            ? 'TWAP oracle reduces manipulation risk. Price converges to 1 at PT maturity.'
+            : 'Battle-tested oracle with strong reliability. Liquidation risk is primarily from position leverage.';
+        riskSummaryClass += ' safe';
+    } else if (oracleData.stability === 'medium') {
+        riskIcon = '⚠️';
+        riskText = 'Newer oracle with moderate track record. Monitor position closely for unexpected price movements.';
+        riskSummaryClass += ' caution';
+    } else {
+        riskIcon = '🚨';
+        riskText = 'Spot price oracle susceptible to manipulation. High liquidation risk from flash loan attacks.';
+        riskSummaryClass += ' danger';
+    }
+
+    oracleRiskSummary.innerHTML = `<span class="risk-icon">${riskIcon}</span><span class="risk-text">${riskText}</span>`;
+    oracleRiskSummary.className = riskSummaryClass;
 }
 
 // Update loop calculator results

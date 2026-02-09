@@ -2427,3 +2427,190 @@ input[type="range"]::-webkit-slider-thumb {
     color: var(--text-muted);
     margin: 0;
 }
+
+/* Oracle Analysis Card */
+.oracle-card {
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(45, 212, 191, 0.03) 100%);
+}
+
+.oracle-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+
+.oracle-icon {
+    font-size: 28px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-card);
+    border-radius: 10px;
+}
+
+.oracle-title {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.oracle-type {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.oracle-provider {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.oracle-stability-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    background: var(--bg-card);
+}
+
+.oracle-stability-badge.very-high {
+    background: rgba(45, 212, 191, 0.1);
+    color: var(--profit-color);
+}
+
+.oracle-stability-badge.high {
+    background: rgba(45, 212, 191, 0.1);
+    color: var(--pt-color);
+}
+
+.oracle-stability-badge.medium {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning-color);
+}
+
+.oracle-stability-badge.low {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--loss-color);
+}
+
+.oracle-stability-badge.unknown {
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+}
+
+.oracle-description {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.oracle-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.oracle-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.oracle-metric .metric-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.oracle-metric .metric-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.oracle-metric .metric-value.twap {
+    color: var(--pt-color);
+}
+
+.oracle-metric .metric-value.spot {
+    color: var(--warning-color);
+}
+
+.oracle-risk-summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.oracle-risk-summary.safe {
+    background: rgba(45, 212, 191, 0.1);
+    border: 1px solid var(--pt-color);
+}
+
+.oracle-risk-summary.safe .risk-icon {
+    color: var(--pt-color);
+}
+
+.oracle-risk-summary.safe .risk-text {
+    color: var(--pt-color);
+}
+
+.oracle-risk-summary.caution {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid var(--warning-color);
+}
+
+.oracle-risk-summary.caution .risk-icon,
+.oracle-risk-summary.caution .risk-text {
+    color: var(--warning-color);
+}
+
+.oracle-risk-summary.danger {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--loss-color);
+}
+
+.oracle-risk-summary.danger .risk-icon,
+.oracle-risk-summary.danger .risk-text {
+    color: var(--loss-color);
+}
+
+.oracle-risk-summary.warning {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.oracle-risk-summary.warning .risk-text {
+    color: var(--text-secondary);
+}
+
+.oracle-risk-summary .risk-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.oracle-risk-summary .risk-text {
+    flex: 1;
+}
