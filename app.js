@@ -1946,7 +1946,7 @@ function renderLoopOpportunitiesList() {
     if (!container) return;
 
     // Filter markets with loop opportunities
-    const loopMarkets = allMarkets.filter(m => m.loopOpportunity);
+    const loopMarkets = markets.filter(m => m.loopOpportunity);
 
     if (loopMarkets.length === 0) {
         container.innerHTML = `
@@ -2023,7 +2023,7 @@ function renderLoopOpportunitiesList() {
     container.querySelectorAll('.loop-market-card').forEach(card => {
         card.addEventListener('click', () => {
             const address = card.dataset.address;
-            const market = allMarkets.find(m => m.address === address);
+            const market = markets.find(m => m.address === address);
             if (market) {
                 selectMarket(market);
             }
