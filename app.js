@@ -1756,23 +1756,8 @@ function populateCalculatorFromMarket(market, chainId) {
         document.getElementById('compare-banner-expiry').textContent = `Expires ${formatDate(market.expiry)}`;
     }
 
-    // Update looping banner
-    const loopingBanner = document.getElementById('looping-market-banner');
-    if (loopingBanner && market.loopOpportunity) {
-        loopingBanner.style.display = 'flex';
-        document.getElementById('looping-banner-icon').src = market.proIcon || market.icon || '';
-        document.getElementById('looping-banner-name').textContent = market.proName || market.name;
-        document.getElementById('looping-banner-expiry').textContent = `Expires ${formatDate(market.expiry)}`;
-
-        const pendleUrls = getPendleUrls(market, currentChainId);
-        document.getElementById('looping-pendle-link').href = pendleUrls.pt;
-    } else if (loopingBanner) {
-        loopingBanner.style.display = 'none';
-    }
-
     updateCalculator();
     updateCompareCalculator();
-    updateLoopingSection();
 }
 
 // Position type state
@@ -1880,6 +1865,43 @@ function updateCalculator() {
     const holdPeriodYield = (expectedApy / 100) * (days / 365);
     const holdYield = investment * holdPeriodYield;
 
+    // Calculate loop results
+    let loopProfit = 0;
+    const loopOpportunity = selectedMarket?.loopOpportunity;
+    const loopAvailable = document.getElementById('loop-available');
+    const loopUnavailable = document.getElementById('loop-unavailable');
+    const loopOracleSection = document.getElementById('loop-oracle-section');
+
+    if (loopOpportunity && positionType === 'loop') {
+        const loopPeriodReturn = (loopOpportunity.effectiveApy / 100) * (days / 365);
+        const loopFinalValue = investment * (1 + loopPeriodReturn);
+        loopProfit = loopFinalValue - investment;
+        const vsPtProfit = loopProfit - ptProfit;
+
+        document.getElementById('calc-loop-effective-apy').textContent = formatPercent(loopOpportunity.effectiveApy);
+        document.getElementById('calc-loop-base-apy').textContent = formatPercent(fixedApy);
+        document.getElementById('calc-loop-boost').textContent = '+' + formatPercent(loopOpportunity.apyBoost);
+        document.getElementById('calc-loop-platform').textContent = loopOpportunity.platform;
+        document.getElementById('calc-loop-leverage').textContent = `${(loopOpportunity.ltv * 100).toFixed(0)}% / ${loopOpportunity.safeLeverage.toFixed(2)}x`;
+        document.getElementById('calc-loop-borrow-rate').textContent = formatPercent(loopOpportunity.borrowRate);
+        document.getElementById('calc-loop-liq-buffer').textContent = loopOpportunity.liquidationBuffer.toFixed(1) + '%';
+        document.getElementById('calc-loop-value').textContent = formatCurrency(loopFinalValue);
+        document.getElementById('calc-loop-profit').textContent = '+' + formatCurrency(loopProfit);
+        document.getElementById('calc-loop-vs-pt').textContent = '+' + formatCurrency(vsPtProfit) + ' extra';
+        document.getElementById('calc-loop-vs-pt').className = 'result-value profit';
+
+        if (loopAvailable) loopAvailable.style.display = 'block';
+        if (loopUnavailable) loopUnavailable.style.display = 'none';
+
+        // Update oracle analysis
+        updateOracleAnalysis();
+        if (loopOracleSection) loopOracleSection.style.display = 'block';
+    } else if (positionType === 'loop') {
+        if (loopAvailable) loopAvailable.style.display = 'none';
+        if (loopUnavailable) loopUnavailable.style.display = 'block';
+        if (loopOracleSection) loopOracleSection.style.display = 'none';
+    }
+
     let vsHold;
     if (positionType === 'pt') {
         vsHold = ptProfit - holdYield;
@@ -1887,6 +1909,8 @@ function updateCalculator() {
         vsHold = ytPnl - holdYield;
     } else if (positionType === 'lp') {
         vsHold = (lpFinalValue - investment) - holdYield;
+    } else if (positionType === 'loop') {
+        vsHold = loopProfit - holdYield;
     }
 
     document.getElementById('calc-vs-hold').textContent = (vsHold >= 0 ? '+' : '') + formatCurrency(vsHold);
@@ -1896,139 +1920,12 @@ function updateCalculator() {
     document.getElementById('pt-results').style.display = positionType === 'pt' ? 'block' : 'none';
     document.getElementById('yt-results').style.display = positionType === 'yt' ? 'block' : 'none';
     document.getElementById('lp-results').style.display = positionType === 'lp' ? 'block' : 'none';
-}
+    document.getElementById('loop-results').style.display = positionType === 'loop' ? 'block' : 'none';
 
-// Update looping section
-function updateLoopingSection() {
-    const loopOpportunity = selectedMarket?.loopOpportunity;
-    const opportunitiesList = document.getElementById('looping-opportunities-list');
-    const loopingDetails = document.getElementById('looping-details');
-
-    if (!selectedMarket || !loopOpportunity) {
-        if (opportunitiesList) opportunitiesList.style.display = 'block';
-        if (loopingDetails) loopingDetails.style.display = 'none';
-        // Render loop opportunities list
-        renderLoopOpportunitiesList();
-        return;
+    // Show/hide oracle section based on position type
+    if (loopOracleSection && positionType !== 'loop') {
+        loopOracleSection.style.display = 'none';
     }
-
-    // Show details, hide list
-    if (opportunitiesList) opportunitiesList.style.display = 'none';
-    if (loopingDetails) loopingDetails.style.display = 'block';
-
-    // Calculate PT fixed APY
-    const ptFixedApy = calculateFixedAPY(selectedMarket.ptPrice, selectedMarket.days);
-
-    // Update metrics
-    document.getElementById('loop-effective-apy').textContent = formatPercent(loopOpportunity.effectiveApy);
-    document.getElementById('loop-base-apy').textContent = formatPercent(ptFixedApy);
-    document.getElementById('loop-apy-boost').textContent = '+' + formatPercent(loopOpportunity.apyBoost);
-    document.getElementById('loop-platform').textContent = loopOpportunity.platform + (loopOpportunity.isEstimated ? ' (estimated)' : '');
-    document.getElementById('loop-platform-name').textContent = loopOpportunity.platform;
-    document.getElementById('loop-collateral').textContent = loopOpportunity.collateralSymbol;
-    document.getElementById('loop-borrow-asset').textContent = loopOpportunity.borrowSymbol;
-    document.getElementById('loop-ltv').textContent = (loopOpportunity.ltv * 100).toFixed(0) + '%';
-    document.getElementById('loop-borrow-rate').textContent = formatPercent(loopOpportunity.borrowRate);
-    document.getElementById('loop-safe-leverage').textContent = loopOpportunity.safeLeverage.toFixed(2) + 'x';
-    document.getElementById('loop-max-leverage').textContent = loopOpportunity.maxLeverage.toFixed(2) + 'x';
-    document.getElementById('loop-liq-buffer').textContent = loopOpportunity.liquidationBuffer.toFixed(1) + '%';
-
-    // Update oracle analysis
-    updateOracleAnalysis();
-
-    // Update calculator
-    updateLoopCalculator();
-}
-
-// Render list of loop opportunities
-function renderLoopOpportunitiesList() {
-    const container = document.getElementById('loop-markets-container');
-    if (!container) return;
-
-    // Filter markets with loop opportunities
-    const loopMarkets = markets.filter(m => m.loopOpportunity);
-
-    if (loopMarkets.length === 0) {
-        container.innerHTML = `
-            <div class="loop-empty-state">
-                <div class="empty-icon">🔄</div>
-                <h4>No Loop Opportunities Found</h4>
-                <p>Loop opportunities appear when PT markets have integrations with lending protocols like Aave or Morpho.</p>
-                <p class="empty-hint">Try selecting a different chain or check back later.</p>
-            </div>
-        `;
-        return;
-    }
-
-    // Sort by effective APY descending
-    loopMarkets.sort((a, b) => (b.loopOpportunity?.effectiveApy || 0) - (a.loopOpportunity?.effectiveApy || 0));
-
-    container.innerHTML = loopMarkets.map(market => {
-        const loop = market.loopOpportunity;
-        const ptFixedApy = calculateFixedAPY(market.ptPrice, market.days);
-        const expiryDate = new Date(Date.now() + market.days * 24 * 60 * 60 * 1000);
-        const expiryStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-        // Get oracle info
-        const marketName = (market.name || market.proName || '').toUpperCase();
-        let oracleStability = 'unknown';
-        for (const [assetName, pairData] of Object.entries(KNOWN_PT_LENDING_PAIRS)) {
-            if (marketName.includes(assetName.toUpperCase()) && pairData.oracle) {
-                oracleStability = pairData.oracle.stability;
-                break;
-            }
-        }
-        const stabilityInfo = ORACLE_STABILITY_INFO[oracleStability] || { icon: '?', label: 'Unknown' };
-
-        return `
-            <div class="loop-market-card" data-address="${market.address}">
-                <div class="loop-market-info">
-                    <img src="${market.icon || ''}" alt="" class="loop-market-icon" onerror="this.style.display='none'">
-                    <div class="loop-market-details">
-                        <span class="loop-market-name">${market.name || market.proName}</span>
-                        <span class="loop-market-expiry">Expires ${expiryStr}</span>
-                    </div>
-                </div>
-                <div class="loop-market-metrics">
-                    <div class="loop-market-metric">
-                        <span class="metric-label">Effective APY</span>
-                        <span class="metric-value highlight">${formatPercent(loop.effectiveApy)}</span>
-                    </div>
-                    <div class="loop-market-metric">
-                        <span class="metric-label">Base APY</span>
-                        <span class="metric-value">${formatPercent(ptFixedApy)}</span>
-                    </div>
-                    <div class="loop-market-metric">
-                        <span class="metric-label">APY Boost</span>
-                        <span class="metric-value boost">+${formatPercent(loop.apyBoost)}</span>
-                    </div>
-                    <div class="loop-market-metric">
-                        <span class="metric-label">Platform</span>
-                        <span class="metric-value">${loop.platform}</span>
-                    </div>
-                    <div class="loop-market-metric">
-                        <span class="metric-label">LTV</span>
-                        <span class="metric-value">${(loop.ltv * 100).toFixed(0)}%</span>
-                    </div>
-                    <div class="loop-market-metric">
-                        <span class="metric-label">Oracle</span>
-                        <span class="metric-value oracle-${oracleStability}">${stabilityInfo.icon} ${stabilityInfo.label}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    // Add click handlers
-    container.querySelectorAll('.loop-market-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const address = card.dataset.address;
-            const market = markets.find(m => m.address === address);
-            if (market) {
-                selectMarket(market);
-            }
-        });
-    });
 }
 
 // Update oracle analysis section
@@ -2400,33 +2297,6 @@ function renderOraclePriceChart(data) {
             }
         }
     });
-}
-
-// Update loop calculator results
-function updateLoopCalculator() {
-    const loopOpportunity = selectedMarket?.loopOpportunity;
-    if (!loopOpportunity) return;
-
-    const investment = parseFloat(document.getElementById('loop-investment')?.value) || 10000;
-    const days = selectedMarket.days;
-    const ptFixedApy = calculateFixedAPY(selectedMarket.ptPrice, days);
-
-    // Calculate returns
-    const loopPeriodReturn = (loopOpportunity.effectiveApy / 100) * (days / 365);
-    const loopFinalValue = investment * (1 + loopPeriodReturn);
-    const loopProfit = loopFinalValue - investment;
-
-    // Calculate regular PT returns for comparison
-    const ptPeriodReturn = (ptFixedApy / 100) * (days / 365);
-    const ptFinalValue = investment * (1 + ptPeriodReturn);
-    const ptProfit = ptFinalValue - investment;
-
-    const vsPt = loopProfit - ptProfit;
-
-    document.getElementById('loop-expected-value').textContent = formatCurrency(loopFinalValue);
-    document.getElementById('loop-expected-profit').textContent = '+' + formatCurrency(loopProfit);
-    document.getElementById('loop-vs-pt').textContent = '+' + formatCurrency(vsPt) + ' extra';
-    document.getElementById('loop-vs-pt').className = 'result-value profit';
 }
 
 // Compare calculator
@@ -3169,8 +3039,6 @@ function switchTab(tabName) {
         updateCompareCalculator();
     } else if (tabName === 'calculator') {
         updateCalculator();
-    } else if (tabName === 'looping') {
-        updateLoopingSection();
     }
 }
 
@@ -3284,36 +3152,11 @@ function initEventListeners() {
         selectedMarket = null;
         document.getElementById('selected-market-banner').style.display = 'none';
         document.getElementById('compare-market-banner').style.display = 'none';
-        document.getElementById('looping-market-banner').style.display = 'none';
         document.getElementById('history-card').style.display = 'none';
+        document.getElementById('loop-oracle-section').style.display = 'none';
         clearUrlMarket();
-        updateLoopingSection();
+        updateCalculator();
     });
-
-    // Looping section clear selection
-    document.getElementById('looping-clear-selection')?.addEventListener('click', () => {
-        selectedMarket = null;
-        document.getElementById('selected-market-banner').style.display = 'none';
-        document.getElementById('compare-market-banner').style.display = 'none';
-        document.getElementById('looping-market-banner').style.display = 'none';
-        document.getElementById('history-card').style.display = 'none';
-        clearUrlMarket();
-        updateLoopingSection();
-    });
-
-    // View loop opportunities button
-    document.getElementById('view-loop-markets-btn')?.addEventListener('click', () => {
-        // Switch to markets tab and filter by loop opportunities
-        switchTab('markets');
-        const signalFilter = document.getElementById('signal-filter');
-        if (signalFilter) {
-            signalFilter.value = 'loop-opportunity';
-            renderMarkets();
-        }
-    });
-
-    // Looping investment input
-    document.getElementById('loop-investment')?.addEventListener('input', updateLoopCalculator);
 
     // Theme toggle
     document.getElementById('theme-toggle')?.addEventListener('click', () => {
