@@ -36,6 +36,7 @@
 
         <nav class="tabs">
             <button class="tab active" data-tab="markets">Live Markets</button>
+            <button class="tab" data-tab="looping">PT Looping</button>
             <button class="tab" data-tab="calculator">Calculator</button>
             <button class="tab" data-tab="compare">Strategy Compare</button>
         </nav>
@@ -94,6 +95,7 @@
                             <option value="pt-opportunity">PT Opportunities</option>
                             <option value="yt-opportunity">YT Opportunities</option>
                             <option value="lp-opportunity">LP Opportunities</option>
+                            <option value="loop-opportunity">Loop Opportunities</option>
                             <option value="has-incentives">With Incentives</option>
                             <option value="no-incentives">No Incentives</option>
                             <option value="pure-points">Pure Points (0% Underlying)</option>
@@ -123,6 +125,10 @@
                         <span class="signal-dot lp-signal"></span>
                         <span>LP Opportunity</span>
                     </button>
+                    <button class="legend-btn active" data-filter="loop" title="Click to toggle, double-click to isolate">
+                        <span class="signal-dot loop-signal"></span>
+                        <span>Loop Opportunity</span>
+                    </button>
                     <button class="legend-btn active" data-filter="neutral" title="Click to toggle, double-click to isolate">
                         <span class="signal-dot neutral-signal"></span>
                         <span>Neutral</span>
@@ -144,6 +150,159 @@
                 </div>
                 <div class="markets-container" id="markets-list">
                     <div class="loading">Loading markets...</div>
+                </div>
+            </section>
+
+            <!-- PT Looping -->
+            <section id="looping-calculator" class="calculator-section">
+                <div class="section-header">
+                    <h2>PT Looping Strategy</h2>
+                    <p>Leverage your PT position using Aave V3 or Morpho Blue as collateral</p>
+                </div>
+
+                <div class="selected-market-banner" id="looping-market-banner" style="display: none;">
+                    <div class="banner-content">
+                        <img id="looping-banner-icon" src="" alt="" class="banner-icon">
+                        <div class="banner-info">
+                            <span class="banner-name" id="looping-banner-name">-</span>
+                            <span class="banner-expiry" id="looping-banner-expiry">-</span>
+                        </div>
+                    </div>
+                    <div class="banner-actions">
+                        <a id="looping-pendle-link" href="#" target="_blank" class="pendle-link pt-link" title="Trade PT on Pendle">Buy PT</a>
+                        <button class="banner-clear" id="looping-clear-selection">Clear</button>
+                    </div>
+                </div>
+
+                <div class="looping-content" id="looping-content">
+                    <div class="looping-select-prompt" id="looping-select-prompt">
+                        <div class="prompt-icon">🔄</div>
+                        <h3>Select a Market with Loop Opportunity</h3>
+                        <p>Click on a market with the <span class="loop-badge-example">🔄 Loop</span> badge from the Live Markets tab, or filter by "Loop Opportunities" to find eligible markets.</p>
+                        <button class="view-loop-markets-btn" id="view-loop-markets-btn">View Loop Opportunities</button>
+                    </div>
+
+                    <div class="looping-details" id="looping-details" style="display: none;">
+                        <div class="looping-grid">
+                            <div class="looping-card strategy-card">
+                                <h3>How PT Looping Works</h3>
+                                <div class="strategy-steps">
+                                    <div class="strategy-step">
+                                        <span class="step-num">1</span>
+                                        <span class="step-text">Buy PT at discount (lock in fixed APY)</span>
+                                    </div>
+                                    <div class="strategy-step">
+                                        <span class="step-num">2</span>
+                                        <span class="step-text">Deposit PT as collateral on <span id="loop-platform-name">Aave/Morpho</span></span>
+                                    </div>
+                                    <div class="strategy-step">
+                                        <span class="step-num">3</span>
+                                        <span class="step-text">Borrow stablecoins against PT</span>
+                                    </div>
+                                    <div class="strategy-step">
+                                        <span class="step-num">4</span>
+                                        <span class="step-text">Buy more PT with borrowed funds</span>
+                                    </div>
+                                    <div class="strategy-step">
+                                        <span class="step-num">5</span>
+                                        <span class="step-text">Repeat for desired leverage</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="looping-card metrics-card">
+                                <h3>Loop Metrics</h3>
+                                <div class="loop-metric highlight-metric">
+                                    <span class="metric-label">Effective APY</span>
+                                    <span class="metric-value loop-highlight" id="loop-effective-apy">-</span>
+                                </div>
+                                <div class="loop-metric">
+                                    <span class="metric-label">Base PT Fixed APY</span>
+                                    <span class="metric-value" id="loop-base-apy">-</span>
+                                </div>
+                                <div class="loop-metric">
+                                    <span class="metric-label">APY Boost</span>
+                                    <span class="metric-value profit" id="loop-apy-boost">-</span>
+                                </div>
+                                <div class="loop-metric-divider"></div>
+                                <div class="loop-metric">
+                                    <span class="metric-label">Platform</span>
+                                    <span class="metric-value" id="loop-platform">-</span>
+                                </div>
+                                <div class="loop-metric">
+                                    <span class="metric-label">Collateral</span>
+                                    <span class="metric-value" id="loop-collateral">-</span>
+                                </div>
+                                <div class="loop-metric">
+                                    <span class="metric-label">Borrow Asset</span>
+                                    <span class="metric-value" id="loop-borrow-asset">-</span>
+                                </div>
+                            </div>
+
+                            <div class="looping-card risk-card">
+                                <h3>Risk Parameters</h3>
+                                <div class="loop-metric">
+                                    <span class="metric-label">Loan-to-Value (LTV)</span>
+                                    <span class="metric-value" id="loop-ltv">-</span>
+                                </div>
+                                <div class="loop-metric">
+                                    <span class="metric-label">Borrow Rate</span>
+                                    <span class="metric-value" id="loop-borrow-rate">-</span>
+                                </div>
+                                <div class="loop-metric">
+                                    <span class="metric-label">Safe Leverage</span>
+                                    <span class="metric-value" id="loop-safe-leverage">-</span>
+                                </div>
+                                <div class="loop-metric">
+                                    <span class="metric-label">Max Leverage</span>
+                                    <span class="metric-value" id="loop-max-leverage">-</span>
+                                </div>
+                                <div class="loop-metric">
+                                    <span class="metric-label">Liquidation Buffer</span>
+                                    <span class="metric-value" id="loop-liq-buffer">-</span>
+                                </div>
+                            </div>
+
+                            <div class="looping-card calculator-card">
+                                <h3>Returns Calculator</h3>
+                                <div class="loop-input-group">
+                                    <label for="loop-investment">Investment Amount</label>
+                                    <div class="input-wrapper">
+                                        <input type="number" id="loop-investment" value="10000" step="100" min="0">
+                                        <span class="input-suffix">USD</span>
+                                    </div>
+                                </div>
+                                <div class="loop-results-summary">
+                                    <div class="loop-result-item">
+                                        <span class="result-label">Expected Value at Maturity</span>
+                                        <span class="result-value profit" id="loop-expected-value">-</span>
+                                    </div>
+                                    <div class="loop-result-item">
+                                        <span class="result-label">Expected Profit</span>
+                                        <span class="result-value profit" id="loop-expected-profit">-</span>
+                                    </div>
+                                    <div class="loop-result-item">
+                                        <span class="result-label">vs Regular PT</span>
+                                        <span class="result-value" id="loop-vs-pt">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="loop-warning-banner">
+                            <span class="warning-icon">⚠️</span>
+                            <div class="warning-content">
+                                <strong>Liquidation Risk</strong>
+                                <p>If PT price drops significantly, your position may be liquidated. The safe leverage calculation uses 90% of max LTV to provide a buffer, but market volatility can still trigger liquidations. Monitor your position closely.</p>
+                            </div>
+                        </div>
+
+                        <div class="loop-formula-card">
+                            <h4>Effective APY Formula</h4>
+                            <code>(PT_Fixed_APY × Leverage) - (Borrow_Rate × (Leverage - 1))</code>
+                            <p class="formula-explanation">Your effective APY is amplified by leverage, minus the cost of borrowing. Higher LTV means higher possible leverage but also higher liquidation risk.</p>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -469,7 +628,7 @@
 
                 <div class="info-card">
                     <h4>Understanding Strategies</h4>
-                    <div class="valuation-guide three-col">
+                    <div class="valuation-guide four-col">
                         <div class="guide-item pt-guide">
                             <strong>PT (Principal Token)</strong>
                             <ul>
@@ -492,6 +651,14 @@
                                 <li>Earn swap fees from PT/SY trading</li>
                                 <li>Often receive bonus incentives (PENDLE, points)</li>
                                 <li>Balanced risk: part fixed, part variable yield</li>
+                            </ul>
+                        </div>
+                        <div class="guide-item loop-guide">
+                            <strong>Loop PT (Leveraged)</strong>
+                            <ul>
+                                <li>Use PT as collateral on Aave/Morpho</li>
+                                <li>Amplify fixed APY through leverage</li>
+                                <li>Higher returns but liquidation risk</li>
                             </ul>
                         </div>
                     </div>
@@ -716,6 +883,10 @@
             <strong style="color: var(--lp-color);">LP (Liquidity Provider)</strong>
             <p>Deposit into PT/SY pools to earn swap fees plus incentives. You're exposed to both PT price and underlying yield. Lower risk than YT, often with bonus rewards.</p>
         </div>
+        <div class="tooltip-section">
+            <strong style="color: var(--loop-color);">Loop PT (Leveraged PT)</strong>
+            <p>Use PT as collateral on Aave/Morpho to borrow stablecoins, then buy more PT. Amplifies your fixed APY through leverage. Higher risk due to liquidation potential.</p>
+        </div>
     </template>
 
     <template id="tooltip-lp-apy">
@@ -727,6 +898,21 @@
             <li><strong>Incentives:</strong> PENDLE emissions, partner rewards, points</li>
         </ul>
         <p class="tooltip-note">Note: LP position has some exposure to PT price changes (similar to impermanent loss).</p>
+    </template>
+
+    <template id="tooltip-loop-strategy">
+        <h4>PT Looping Strategy</h4>
+        <p>A leveraged yield strategy using PT as collateral:</p>
+        <ul>
+            <li><strong>1. Buy PT:</strong> Purchase PT at a discount to lock in fixed APY</li>
+            <li><strong>2. Deposit as Collateral:</strong> Deposit PT on Aave V3 or Morpho Blue</li>
+            <li><strong>3. Borrow Stablecoins:</strong> Borrow USDC/USDT against your PT</li>
+            <li><strong>4. Buy More PT:</strong> Use borrowed funds to buy more PT</li>
+            <li><strong>5. Repeat:</strong> Loop for additional leverage</li>
+        </ul>
+        <p><strong>Effective APY Formula:</strong><br>
+        (PT Fixed APY × Leverage) - (Borrow Rate × (Leverage - 1))</p>
+        <p class="tooltip-note">⚠️ Warning: Liquidation risk if PT price drops significantly. Monitor your position and maintain safe leverage.</p>
     </template>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

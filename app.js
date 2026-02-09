@@ -3,6 +3,23 @@
 const PENDLE_FEE = 0.05; // 5% fee on YT yield
 const API_BASE = 'https://api-v2.pendle.finance/core';
 
+// Aave V3 GraphQL Subgraph endpoints by chain
+const AAVE_SUBGRAPHS = {
+    1: 'https://api.thegraph.com/subgraphs/name/aave/protocol-v3',
+    42161: 'https://api.thegraph.com/subgraphs/name/aave/protocol-v3-arbitrum',
+};
+
+// Morpho Blue API endpoint
+const MORPHO_API = 'https://blue-api.morpho.org/graphql';
+
+// Cache for lending markets data (5 minute TTL)
+const lendingMarketsCache = {
+    aave: new Map(),
+    morpho: new Map(),
+    lastFetch: 0,
+    TTL: 5 * 60 * 1000 // 5 minutes
+};
+
 // Multiple CORS proxy options to try
 const CORS_PROXIES = [
     (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
@@ -192,6 +209,312 @@ async function fetchProtocolApy(source) {
     return null;
 }
 
+// Fetch Aave V3 reserves data for a chain
+async function fetchAaveReserves(chainId) {
+    const cacheKey = `aave-${chainId}`;
+    const now = Date.now();
+
+    // Check cache
+    if (lendingMarketsCache.aave.has(cacheKey)) {
+        const cached = lendingMarketsCache.aave.get(cacheKey);
+        if (now - cached.timestamp < lendingMarketsCache.TTL) {
+            return cached.data;
+        }
+    }
+
+    const subgraphUrl = AAVE_SUBGRAPHS[chainId];
+    if (!subgraphUrl) return [];
+
+    const query = `{
+        reserves(first: 100, where: {isActive: true}) {
+            id
+            symbol
+            name
+            underlyingAsset
+            usageAsCollateralEnabled
+            baseLTVasCollateral
+            reserveLiquidationThreshold
+            variableBorrowRate
+            stableBorrowRate
+            availableLiquidity
+            totalCurrentVariableDebt
+        }
+    }`;
+
+    try {
+        let response = null;
+        let data = null;
+
+        // Try direct fetch first
+        try {
+            response = await fetch(subgraphUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            });
+            if (response.ok) {
+                data = await response.json();
+            }
+        } catch (e) {
+            console.log(`Direct Aave fetch failed for chain ${chainId}, trying proxy...`);
+        }
+
+        // Try with CORS proxy
+        if (!data) {
+            for (const proxyFn of CORS_PROXIES) {
+                try {
+                    response = await fetch(proxyFn(subgraphUrl), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query })
+                    });
+                    if (response.ok) {
+                        data = await response.json();
+                        if (data?.data?.reserves) break;
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+        }
+
+        if (data?.data?.reserves) {
+            const reserves = data.data.reserves.map(r => ({
+                symbol: r.symbol,
+                name: r.name,
+                underlyingAsset: r.underlyingAsset,
+                usageAsCollateralEnabled: r.usageAsCollateralEnabled,
+                ltv: parseFloat(r.baseLTVasCollateral) / 10000, // Convert from basis points
+                liquidationThreshold: parseFloat(r.reserveLiquidationThreshold) / 10000,
+                borrowRate: parseFloat(r.variableBorrowRate) / 1e27 * 100, // Convert from RAY to percentage
+                platform: 'Aave V3'
+            }));
+
+            lendingMarketsCache.aave.set(cacheKey, { data: reserves, timestamp: now });
+            return reserves;
+        }
+    } catch (e) {
+        console.error('Failed to fetch Aave reserves:', e);
+    }
+
+    return [];
+}
+
+// Fetch Morpho Blue markets data
+async function fetchMorphoMarkets(chainIds = [1]) {
+    const cacheKey = `morpho-${chainIds.join('-')}`;
+    const now = Date.now();
+
+    // Check cache
+    if (lendingMarketsCache.morpho.has(cacheKey)) {
+        const cached = lendingMarketsCache.morpho.get(cacheKey);
+        if (now - cached.timestamp < lendingMarketsCache.TTL) {
+            return cached.data;
+        }
+    }
+
+    const query = `{
+        markets(first: 100, where: {whitelisted: true}) {
+            id
+            uniqueKey
+            lltv
+            collateralAsset {
+                symbol
+                name
+                address
+            }
+            loanAsset {
+                symbol
+                name
+                address
+            }
+            state {
+                borrowApy
+                supplyApy
+                totalBorrowAssets
+                totalSupplyAssets
+            }
+        }
+    }`;
+
+    try {
+        let response = null;
+        let data = null;
+
+        // Try direct fetch first
+        try {
+            response = await fetch(MORPHO_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            });
+            if (response.ok) {
+                data = await response.json();
+            }
+        } catch (e) {
+            console.log('Direct Morpho fetch failed, trying proxy...');
+        }
+
+        // Try with CORS proxy
+        if (!data) {
+            for (const proxyFn of CORS_PROXIES) {
+                try {
+                    response = await fetch(proxyFn(MORPHO_API), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query })
+                    });
+                    if (response.ok) {
+                        data = await response.json();
+                        if (data?.data?.markets) break;
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+        }
+
+        if (data?.data?.markets) {
+            const markets = data.data.markets.map(m => ({
+                id: m.uniqueKey,
+                collateralSymbol: m.collateralAsset?.symbol || '',
+                collateralName: m.collateralAsset?.name || '',
+                collateralAddress: m.collateralAsset?.address || '',
+                loanSymbol: m.loanAsset?.symbol || '',
+                ltv: parseFloat(m.lltv) / 1e18, // Convert from wei
+                borrowRate: (m.state?.borrowApy || 0) * 100, // Already a decimal
+                platform: 'Morpho Blue'
+            }));
+
+            lendingMarketsCache.morpho.set(cacheKey, { data: markets, timestamp: now });
+            return markets;
+        }
+    } catch (e) {
+        console.error('Failed to fetch Morpho markets:', e);
+    }
+
+    return [];
+}
+
+// Known PT-Lending pairs for priority matching
+const KNOWN_PT_LENDING_PAIRS = {
+    'sUSDe': { platforms: ['Aave V3', 'Morpho Blue'], expectedLtv: 0.87 },
+    'eUSDe': { platforms: ['Morpho Blue'], expectedLtv: 0.85 },
+    'USDe': { platforms: ['Aave V3'], expectedLtv: 0.80 },
+    'wstETH': { platforms: ['Aave V3', 'Morpho Blue'], expectedLtv: 0.80 },
+    'weETH': { platforms: ['Aave V3', 'Morpho Blue'], expectedLtv: 0.75 },
+};
+
+// Calculate loop strategy metrics
+function calculateLoopMetrics(ptFixedApy, ltv, borrowRate) {
+    // Max leverage = 1 / (1 - LTV)
+    const maxLeverage = 1 / (1 - ltv);
+    // Safe leverage = 90% of max to avoid liquidation
+    const safeLeverage = 1 + (maxLeverage - 1) * 0.9;
+
+    // Effective APY = (PT_Fixed_APY × leverage) - (Borrow_Rate × (leverage - 1))
+    const effectiveApy = (ptFixedApy * safeLeverage) - (borrowRate * (safeLeverage - 1));
+
+    // APY boost vs regular PT
+    const apyBoost = effectiveApy - ptFixedApy;
+
+    // Liquidation buffer (how much PT can drop before liquidation)
+    const liquidationBuffer = (1 - ltv) * 100;
+
+    return {
+        maxLeverage,
+        safeLeverage,
+        effectiveApy,
+        apyBoost,
+        liquidationBuffer,
+        borrowRate,
+        ltv
+    };
+}
+
+// Find loop opportunity for a market
+function findLoopOpportunity(market, chainId, aaveReserves, morphoMarkets) {
+    const marketName = (market.name || market.proName || '').toUpperCase();
+    const ptSymbol = `PT-${marketName}`;
+
+    // Get PT fixed APY
+    const ptFixedApy = calculateFixedAPY(market.ptPrice, market.days);
+
+    // Check Aave reserves for PT collateral
+    for (const reserve of aaveReserves) {
+        const reserveSymbol = (reserve.symbol || '').toUpperCase();
+
+        // Match PT symbol or underlying asset as collateral
+        if (reserve.usageAsCollateralEnabled &&
+            (reserveSymbol.includes(marketName) || reserveSymbol.includes('PT-' + marketName))) {
+
+            // Find stablecoin borrow rates (USDC, USDT)
+            const stablecoins = aaveReserves.filter(r =>
+                ['USDC', 'USDT', 'DAI'].includes(r.symbol?.toUpperCase())
+            );
+
+            if (stablecoins.length > 0) {
+                // Use lowest borrow rate
+                const bestStable = stablecoins.reduce((best, current) =>
+                    current.borrowRate < best.borrowRate ? current : best
+                );
+
+                const metrics = calculateLoopMetrics(ptFixedApy, reserve.ltv, bestStable.borrowRate);
+
+                // Only return if APY boost is meaningful (>= 2%)
+                if (metrics.apyBoost >= 2) {
+                    return {
+                        platform: reserve.platform,
+                        collateralSymbol: reserve.symbol,
+                        borrowSymbol: bestStable.symbol,
+                        ...metrics
+                    };
+                }
+            }
+        }
+    }
+
+    // Check Morpho markets for PT collateral
+    for (const morphoMarket of morphoMarkets) {
+        const collateralSymbol = (morphoMarket.collateralSymbol || '').toUpperCase();
+
+        // Match PT symbol or underlying asset as collateral
+        if (collateralSymbol.includes(marketName) || collateralSymbol.includes('PT-' + marketName)) {
+            const metrics = calculateLoopMetrics(ptFixedApy, morphoMarket.ltv, morphoMarket.borrowRate);
+
+            // Only return if APY boost is meaningful (>= 2%)
+            if (metrics.apyBoost >= 2) {
+                return {
+                    platform: morphoMarket.platform,
+                    collateralSymbol: morphoMarket.collateralSymbol,
+                    borrowSymbol: morphoMarket.loanSymbol,
+                    ...metrics
+                };
+            }
+        }
+    }
+
+    // Check known pairs as fallback (simulated data for known integrations)
+    const knownPair = KNOWN_PT_LENDING_PAIRS[marketName];
+    if (knownPair && chainId === 1) {
+        // Use approximate rates for known pairs
+        const estimatedBorrowRate = 5; // ~5% stablecoin borrow rate
+        const metrics = calculateLoopMetrics(ptFixedApy, knownPair.expectedLtv, estimatedBorrowRate);
+
+        if (metrics.apyBoost >= 2) {
+            return {
+                platform: knownPair.platforms[0],
+                collateralSymbol: `PT-${marketName}`,
+                borrowSymbol: 'USDC',
+                ...metrics,
+                isEstimated: true
+            };
+        }
+    }
+
+    return null;
+}
+
 // Verify Pendle's underlying APY against protocol source
 async function verifyUnderlyingApy(market) {
     const source = findProtocolSource(market.name);
@@ -374,7 +697,7 @@ async function fetchOnChainWatermark(market, chainId) {
 let markets = [];
 let selectedMarket = null;
 let comparisonChart = null;
-let legendFilters = { pt: true, yt: true, lp: true, neutral: true, watermark: true };
+let legendFilters = { pt: true, yt: true, lp: true, loop: true, neutral: true, watermark: true };
 let sortDirection = 'desc'; // 'desc' or 'asc'
 let currentSortColumn = 'tvl';
 
@@ -860,6 +1183,12 @@ async function fetchMarkets(chainId = 1) {
     refreshBtn?.classList.add('loading');
     marketsContainer.innerHTML = '<div class="loading">Loading markets...</div>';
 
+    // Fetch lending data in parallel with market data
+    const lendingPromises = Promise.allSettled([
+        fetchAaveReserves(parseInt(chainId)),
+        fetchMorphoMarkets([parseInt(chainId)])
+    ]);
+
     try {
         const apiUrl = `${API_BASE}/v1/markets/all?isActive=true&chainId=${chainId}`;
         let response = null;
@@ -907,6 +1236,12 @@ async function fetchMarkets(chainId = 1) {
         }
 
         console.log(`Loaded ${markets.length} markets`);
+
+        // Get lending data results
+        const lendingResults = await lendingPromises;
+        const aaveReserves = lendingResults[0].status === 'fulfilled' ? lendingResults[0].value : [];
+        const morphoMarkets = lendingResults[1].status === 'fulfilled' ? lendingResults[1].value : [];
+        console.log(`Loaded ${aaveReserves.length} Aave reserves, ${morphoMarkets.length} Morpho markets`);
 
         // Store raw market data for watermark checking
         const rawMarkets = [...markets];
@@ -997,6 +1332,14 @@ async function fetchMarkets(chainId = 1) {
             const swapFeeApy = (details.swapFeeApy || market.swapFeeApy || 0) * 100;
             const lpApy = aggregatedApy > 0 ? aggregatedApy : (swapFeeApy + lpRewardApy + (impliedApy * 0.5)); // Estimate if not provided
 
+            // Find loop opportunity for this market
+            const loopOpportunity = findLoopOpportunity(
+                { ...market, ptPrice, days },
+                parseInt(chainId),
+                aaveReserves,
+                morphoMarkets
+            );
+
             return {
                 ...market,
                 days,
@@ -1006,6 +1349,7 @@ async function fetchMarkets(chainId = 1) {
                 ytPrice,
                 discount,
                 signal: getMarketSignal(underlyingApy, impliedApy),
+                loopOpportunity,
                 tvl,
                 proName: market.name,
                 proIcon: market.icon || '',
@@ -1096,11 +1440,14 @@ function renderMarkets() {
         filtered = filtered.filter(m => !m.isPurePoints && m.underlyingApyPercent > 0.5);
     } else if (signalFilter === 'below-watermark') {
         filtered = filtered.filter(m => m.watermarkStatus?.belowWatermark);
+    } else if (signalFilter === 'loop-opportunity') {
+        filtered = filtered.filter(m => m.loopOpportunity);
     }
 
     // Filter by legend buttons
     filtered = filtered.filter(m => {
         if (m.watermarkStatus?.belowWatermark) return legendFilters.watermark;
+        if (m.loopOpportunity) return legendFilters.loop !== false; // Show loop if filter is not false
         if (isLpOpportunity(m)) return legendFilters.lp;
         if (m.signal.type === 'pt') return legendFilters.pt;
         if (m.signal.type === 'yt') return legendFilters.yt;
@@ -1129,8 +1476,22 @@ function renderMarkets() {
         return;
     }
 
-    container.innerHTML = filtered.map(market => `
-        <div class="market-card ${market.watermarkStatus?.belowWatermark ? 'below-watermark' : market.signal.type + '-opportunity'}" data-address="${market.address}">
+    container.innerHTML = filtered.map(market => {
+        // Determine card class based on opportunity type
+        let cardClass = market.signal.type + '-opportunity';
+        if (market.watermarkStatus?.belowWatermark) {
+            cardClass = 'below-watermark';
+        } else if (market.loopOpportunity) {
+            cardClass = 'loop-opportunity';
+        }
+
+        // Generate loop badge tooltip content
+        const loopTooltip = market.loopOpportunity
+            ? `${market.loopOpportunity.platform} | LTV: ${(market.loopOpportunity.ltv * 100).toFixed(0)}% | Borrow: ${formatPercent(market.loopOpportunity.borrowRate)} | Leverage: ${market.loopOpportunity.safeLeverage.toFixed(1)}x | Effective APY: ${formatPercent(market.loopOpportunity.effectiveApy)}${market.loopOpportunity.isEstimated ? ' (estimated)' : ''}`
+            : '';
+
+        return `
+        <div class="market-card ${cardClass}" data-address="${market.address}">
             <div class="market-info">
                 <img class="market-icon" src="${market.proIcon || market.icon || ''}" alt="" onerror="this.style.display='none'">
                 <div class="market-details">
@@ -1164,13 +1525,15 @@ function renderMarkets() {
             <div class="market-signal">
                 ${market.watermarkStatus?.belowWatermark
                     ? `<span class="signal-badge watermark" title="Exchange rate: ${market.watermarkStatus.ratio.toFixed(4)}x of watermark">⚠️ Below Watermark</span>`
-                    : market.lpApy > market.underlyingApyPercent && market.lpApy > calculateFixedAPY(market.ptPrice, market.days)
-                        ? `<span class="signal-badge lp" title="LP APY beats both underlying and fixed APY">LP Best</span>`
-                        : `<span class="signal-badge ${market.signal.type}">${market.signal.label}</span>`
+                    : market.loopOpportunity
+                        ? `<span class="signal-badge loop" title="${loopTooltip}">🔄 Loop +${formatPercent(market.loopOpportunity.apyBoost)}</span>`
+                        : market.lpApy > market.underlyingApyPercent && market.lpApy > calculateFixedAPY(market.ptPrice, market.days)
+                            ? `<span class="signal-badge lp" title="LP APY beats both underlying and fixed APY">LP Best</span>`
+                            : `<span class="signal-badge ${market.signal.type}">${market.signal.label}</span>`
                 }
             </div>
         </div>
-    `).join('');
+    `}).join('');
 
     // Add click handlers
     container.querySelectorAll('.market-card').forEach(card => {
@@ -1275,8 +1638,23 @@ function populateCalculatorFromMarket(market, chainId) {
         document.getElementById('compare-banner-expiry').textContent = `Expires ${formatDate(market.expiry)}`;
     }
 
+    // Update looping banner
+    const loopingBanner = document.getElementById('looping-market-banner');
+    if (loopingBanner && market.loopOpportunity) {
+        loopingBanner.style.display = 'flex';
+        document.getElementById('looping-banner-icon').src = market.proIcon || market.icon || '';
+        document.getElementById('looping-banner-name').textContent = market.proName || market.name;
+        document.getElementById('looping-banner-expiry').textContent = `Expires ${formatDate(market.expiry)}`;
+
+        const pendleUrls = getPendleUrls(market, currentChainId);
+        document.getElementById('looping-pendle-link').href = pendleUrls.pt;
+    } else if (loopingBanner) {
+        loopingBanner.style.display = 'none';
+    }
+
     updateCalculator();
     updateCompareCalculator();
+    updateLoopingSection();
 }
 
 // Position type state
@@ -1389,7 +1767,7 @@ function updateCalculator() {
         vsHold = ptProfit - holdYield;
     } else if (positionType === 'yt') {
         vsHold = ytPnl - holdYield;
-    } else {
+    } else if (positionType === 'lp') {
         vsHold = (lpFinalValue - investment) - holdYield;
     }
 
@@ -1400,6 +1778,70 @@ function updateCalculator() {
     document.getElementById('pt-results').style.display = positionType === 'pt' ? 'block' : 'none';
     document.getElementById('yt-results').style.display = positionType === 'yt' ? 'block' : 'none';
     document.getElementById('lp-results').style.display = positionType === 'lp' ? 'block' : 'none';
+}
+
+// Update looping section
+function updateLoopingSection() {
+    const loopOpportunity = selectedMarket?.loopOpportunity;
+    const selectPrompt = document.getElementById('looping-select-prompt');
+    const loopingDetails = document.getElementById('looping-details');
+
+    if (!selectedMarket || !loopOpportunity) {
+        if (selectPrompt) selectPrompt.style.display = 'flex';
+        if (loopingDetails) loopingDetails.style.display = 'none';
+        return;
+    }
+
+    // Show details, hide prompt
+    if (selectPrompt) selectPrompt.style.display = 'none';
+    if (loopingDetails) loopingDetails.style.display = 'block';
+
+    // Calculate PT fixed APY
+    const ptFixedApy = calculateFixedAPY(selectedMarket.ptPrice, selectedMarket.days);
+
+    // Update metrics
+    document.getElementById('loop-effective-apy').textContent = formatPercent(loopOpportunity.effectiveApy);
+    document.getElementById('loop-base-apy').textContent = formatPercent(ptFixedApy);
+    document.getElementById('loop-apy-boost').textContent = '+' + formatPercent(loopOpportunity.apyBoost);
+    document.getElementById('loop-platform').textContent = loopOpportunity.platform + (loopOpportunity.isEstimated ? ' (estimated)' : '');
+    document.getElementById('loop-platform-name').textContent = loopOpportunity.platform;
+    document.getElementById('loop-collateral').textContent = loopOpportunity.collateralSymbol;
+    document.getElementById('loop-borrow-asset').textContent = loopOpportunity.borrowSymbol;
+    document.getElementById('loop-ltv').textContent = (loopOpportunity.ltv * 100).toFixed(0) + '%';
+    document.getElementById('loop-borrow-rate').textContent = formatPercent(loopOpportunity.borrowRate);
+    document.getElementById('loop-safe-leverage').textContent = loopOpportunity.safeLeverage.toFixed(2) + 'x';
+    document.getElementById('loop-max-leverage').textContent = loopOpportunity.maxLeverage.toFixed(2) + 'x';
+    document.getElementById('loop-liq-buffer').textContent = loopOpportunity.liquidationBuffer.toFixed(1) + '%';
+
+    // Update calculator
+    updateLoopCalculator();
+}
+
+// Update loop calculator results
+function updateLoopCalculator() {
+    const loopOpportunity = selectedMarket?.loopOpportunity;
+    if (!loopOpportunity) return;
+
+    const investment = parseFloat(document.getElementById('loop-investment')?.value) || 10000;
+    const days = selectedMarket.days;
+    const ptFixedApy = calculateFixedAPY(selectedMarket.ptPrice, days);
+
+    // Calculate returns
+    const loopPeriodReturn = (loopOpportunity.effectiveApy / 100) * (days / 365);
+    const loopFinalValue = investment * (1 + loopPeriodReturn);
+    const loopProfit = loopFinalValue - investment;
+
+    // Calculate regular PT returns for comparison
+    const ptPeriodReturn = (ptFixedApy / 100) * (days / 365);
+    const ptFinalValue = investment * (1 + ptPeriodReturn);
+    const ptProfit = ptFinalValue - investment;
+
+    const vsPt = loopProfit - ptProfit;
+
+    document.getElementById('loop-expected-value').textContent = formatCurrency(loopFinalValue);
+    document.getElementById('loop-expected-profit').textContent = '+' + formatCurrency(loopProfit);
+    document.getElementById('loop-vs-pt').textContent = '+' + formatCurrency(vsPt) + ' extra';
+    document.getElementById('loop-vs-pt').className = 'result-value profit';
 }
 
 // Compare calculator
@@ -2142,6 +2584,8 @@ function switchTab(tabName) {
         updateCompareCalculator();
     } else if (tabName === 'calculator') {
         updateCalculator();
+    } else if (tabName === 'looping') {
+        updateLoopingSection();
     }
 }
 
@@ -2255,9 +2699,36 @@ function initEventListeners() {
         selectedMarket = null;
         document.getElementById('selected-market-banner').style.display = 'none';
         document.getElementById('compare-market-banner').style.display = 'none';
+        document.getElementById('looping-market-banner').style.display = 'none';
         document.getElementById('history-card').style.display = 'none';
         clearUrlMarket();
+        updateLoopingSection();
     });
+
+    // Looping section clear selection
+    document.getElementById('looping-clear-selection')?.addEventListener('click', () => {
+        selectedMarket = null;
+        document.getElementById('selected-market-banner').style.display = 'none';
+        document.getElementById('compare-market-banner').style.display = 'none';
+        document.getElementById('looping-market-banner').style.display = 'none';
+        document.getElementById('history-card').style.display = 'none';
+        clearUrlMarket();
+        updateLoopingSection();
+    });
+
+    // View loop opportunities button
+    document.getElementById('view-loop-markets-btn')?.addEventListener('click', () => {
+        // Switch to markets tab and filter by loop opportunities
+        switchTab('markets');
+        const signalFilter = document.getElementById('signal-filter');
+        if (signalFilter) {
+            signalFilter.value = 'loop-opportunity';
+            renderMarkets();
+        }
+    });
+
+    // Looping investment input
+    document.getElementById('loop-investment')?.addEventListener('input', updateLoopCalculator);
 
     // Theme toggle
     document.getElementById('theme-toggle')?.addEventListener('click', () => {
