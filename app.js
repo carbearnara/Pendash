@@ -1062,8 +1062,19 @@ function renderMarkets() {
     const container = document.getElementById('markets-list');
     const sortBy = currentSortColumn || document.getElementById('sort-filter')?.value || 'tvl';
     const signalFilter = document.getElementById('signal-filter')?.value || 'all';
+    const searchQuery = (document.getElementById('search-filter')?.value || '').trim().toLowerCase();
 
     let filtered = [...markets];
+
+    // Filter by search query (match against name, proName, or underlying asset)
+    if (searchQuery) {
+        filtered = filtered.filter(m => {
+            const name = (m.name || '').toLowerCase();
+            const proName = (m.proName || '').toLowerCase();
+            const symbol = (m.symbol || '').toLowerCase();
+            return name.includes(searchQuery) || proName.includes(searchQuery) || symbol.includes(searchQuery);
+        });
+    }
 
     // Helper to check if LP is the best opportunity
     const isLpOpportunity = (m) => m.lpApy > m.underlyingApyPercent && m.lpApy > calculateFixedAPY(m.ptPrice, m.days);
@@ -1111,7 +1122,10 @@ function renderMarkets() {
     });
 
     if (filtered.length === 0) {
-        container.innerHTML = '<div class="loading">No markets match your filters</div>';
+        const message = searchQuery
+            ? `No markets found for "${searchQuery}"`
+            : 'No markets match your filters';
+        container.innerHTML = `<div class="loading">${message}</div>`;
         return;
     }
 
@@ -2171,6 +2185,26 @@ function initEventListeners() {
         renderMarkets();
     });
     document.getElementById('signal-filter')?.addEventListener('change', renderMarkets);
+
+    // Search filter
+    const searchInput = document.getElementById('search-filter');
+    const searchClear = document.getElementById('search-clear');
+    const searchWrapper = searchInput?.parentElement;
+
+    searchInput?.addEventListener('input', (e) => {
+        const hasValue = e.target.value.length > 0;
+        searchWrapper?.classList.toggle('has-value', hasValue);
+        renderMarkets();
+    });
+
+    searchClear?.addEventListener('click', () => {
+        if (searchInput) {
+            searchInput.value = '';
+            searchWrapper?.classList.remove('has-value');
+            renderMarkets();
+            searchInput.focus();
+        }
+    });
 
     // Legend filter buttons
     document.querySelectorAll('.legend-btn').forEach(btn => {

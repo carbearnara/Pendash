@@ -260,6 +260,83 @@ body {
     border-color: var(--accent-primary);
 }
 
+/* Search Bar */
+.search-group {
+    flex: 1;
+    max-width: 280px;
+    min-width: 180px;
+}
+
+.search-wrapper {
+    display: flex;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0 12px;
+    transition: border-color 0.15s;
+}
+
+.search-wrapper:focus-within {
+    border-color: var(--accent-primary);
+}
+
+.search-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.search-wrapper input {
+    flex: 1;
+    padding: 8px 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    min-width: 0;
+}
+
+.search-wrapper input::placeholder {
+    color: var(--text-muted);
+}
+
+.search-clear {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: var(--bg-secondary);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.search-clear svg {
+    width: 12px;
+    height: 12px;
+    color: var(--text-muted);
+}
+
+.search-clear:hover {
+    background: var(--loss-color);
+}
+
+.search-clear:hover svg {
+    color: white;
+}
+
+.search-wrapper.has-value .search-clear {
+    display: flex;
+}
+
 .refresh-btn {
     display: flex;
     align-items: center;
@@ -1796,6 +1873,7 @@ input[type="range"]::-webkit-slider-thumb {
     }
     .filters { flex-direction: column; align-items: stretch; }
     .filter-group select { width: 100%; }
+    .search-group { max-width: none; }
     .refresh-btn { margin-left: 0; }
     .market-legend { flex-direction: column; gap: 8px; }
 }
