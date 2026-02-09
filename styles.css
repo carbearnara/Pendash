@@ -206,6 +206,15 @@ body {
 
 .section-header {
     margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.section-header-main {
+    flex: 1;
 }
 
 .section-header h2 {
@@ -217,6 +226,115 @@ body {
 .section-header p {
     color: var(--text-muted);
     font-size: 14px;
+}
+
+/* Navigation Link Button */
+.nav-link-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.nav-link-btn:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.nav-link-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* No Market Selected Prompt */
+.no-market-prompt {
+    margin-bottom: 24px;
+}
+
+.prompt-card {
+    background: var(--bg-card);
+    border: 1px dashed var(--border-color);
+    border-radius: 12px;
+    padding: 40px 24px;
+    text-align: center;
+}
+
+.prompt-icon-large {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.prompt-card h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.prompt-card > p {
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.select-market-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.select-market-btn:hover {
+    background: var(--accent-secondary);
+    transform: translateY(-1px);
+}
+
+.select-market-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.prompt-hint {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-top: 16px;
+}
+
+/* Banner Action Button */
+.banner-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.banner-action-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
 }
 
 /* Filters - Pendle style */
@@ -1888,6 +2006,8 @@ input[type="range"]::-webkit-slider-thumb {
     .search-group { max-width: none; }
     .refresh-btn { margin-left: 0; }
     .market-legend { flex-direction: column; gap: 8px; }
+    .section-header { flex-direction: column; }
+    .nav-link-btn { align-self: flex-start; }
 }
 
 @media (max-width: 600px) {
@@ -1899,6 +2019,8 @@ input[type="range"]::-webkit-slider-thumb {
     .winner-banner { flex-direction: column; gap: 4px; }
     .selected-market-banner { flex-direction: column; gap: 12px; }
     .banner-actions { flex-wrap: wrap; justify-content: center; }
+    .prompt-card { padding: 24px 16px; }
+    .prompt-icon-large { font-size: 36px; }
 }
 
 /* 4-column comparison grid responsive */

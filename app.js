@@ -1765,6 +1765,12 @@ let positionType = 'pt';
 
 // Update calculator
 function updateCalculator() {
+    // Show/hide no market prompt
+    const noMarketPrompt = document.getElementById('no-market-prompt');
+    if (noMarketPrompt) {
+        noMarketPrompt.style.display = selectedMarket ? 'none' : 'block';
+    }
+
     const ptPrice = parseFloat(document.getElementById('calc-pt-price').value) || 0.95;
     const ytPrice = parseFloat(document.getElementById('calc-yt-price').value) || 0.05;
     const days = parseFloat(document.getElementById('calc-days').value) || 90;
@@ -2315,6 +2321,12 @@ function renderOraclePriceChart(data) {
 
 // Compare calculator
 function updateCompareCalculator() {
+    // Show/hide no market prompt for compare
+    const noMarketPromptCompare = document.getElementById('no-market-prompt-compare');
+    if (noMarketPromptCompare) {
+        noMarketPromptCompare.style.display = selectedMarket ? 'none' : 'block';
+    }
+
     const ptPrice = parseFloat(document.getElementById('cmp-pt-price').value) || 0.95;
     const ytPrice = parseFloat(document.getElementById('cmp-yt-price').value) || 0.05;
     const days = parseFloat(document.getElementById('cmp-days').value) || 90;
@@ -3170,6 +3182,7 @@ function initEventListeners() {
         document.getElementById('loop-oracle-section').style.display = 'none';
         clearUrlMarket();
         updateCalculator();
+        updateCompareCalculator();
     });
 
     // View loop opportunities button in oracle section
@@ -3180,6 +3193,31 @@ function initEventListeners() {
             signalFilter.value = 'loop-opportunity';
             renderMarkets();
         }
+    });
+
+    // Navigation buttons
+    document.getElementById('browse-markets-btn')?.addEventListener('click', () => {
+        switchTab('markets');
+    });
+
+    document.getElementById('back-to-calculator-btn')?.addEventListener('click', () => {
+        switchTab('calculator');
+    });
+
+    document.getElementById('select-market-btn')?.addEventListener('click', () => {
+        switchTab('markets');
+    });
+
+    document.getElementById('select-market-btn-compare')?.addEventListener('click', () => {
+        switchTab('markets');
+    });
+
+    document.getElementById('compare-strategies-btn')?.addEventListener('click', () => {
+        switchTab('compare');
+    });
+
+    document.getElementById('analyze-in-calculator')?.addEventListener('click', () => {
+        switchTab('calculator');
     });
 
     // Theme toggle

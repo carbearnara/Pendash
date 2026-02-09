@@ -155,8 +155,33 @@
             <!-- Calculator -->
             <section id="calculator-calculator" class="calculator-section">
                 <div class="section-header">
-                    <h2>Position Calculator</h2>
-                    <p>Calculate returns for PT or YT positions</p>
+                    <div class="section-header-main">
+                        <h2>Position Calculator</h2>
+                        <p>Calculate returns for PT or YT positions</p>
+                    </div>
+                    <button class="nav-link-btn" id="browse-markets-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Browse Markets
+                    </button>
+                </div>
+
+                <!-- No Market Selected Prompt -->
+                <div class="no-market-prompt" id="no-market-prompt">
+                    <div class="prompt-card">
+                        <div class="prompt-icon-large">📊</div>
+                        <h3>Select a Market to Analyze</h3>
+                        <p>Choose a market from Live Markets to see detailed calculations, historical data, and strategy recommendations.</p>
+                        <button class="select-market-btn" id="select-market-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
+                            Browse Live Markets
+                        </button>
+                        <p class="prompt-hint">Or enter custom values below to calculate manually</p>
+                    </div>
                 </div>
 
                 <div class="selected-market-banner" id="selected-market-banner" style="display: none;">
@@ -171,6 +196,12 @@
                         <a id="pendle-pt-link" href="#" target="_blank" class="pendle-link pt-link" title="Trade PT on Pendle">Buy PT</a>
                         <a id="pendle-yt-link" href="#" target="_blank" class="pendle-link yt-link" title="Trade YT on Pendle">Buy YT</a>
                         <a id="pendle-lp-link" href="#" target="_blank" class="pendle-link lp-link" title="Provide LP on Pendle">Add LP</a>
+                        <button class="banner-action-btn" id="compare-strategies-btn" title="Compare all strategies">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                <path d="M18 20V10M12 20V4M6 20v-6"/>
+                            </svg>
+                            Compare
+                        </button>
                         <button class="banner-clear" id="clear-selection">Clear</button>
                     </div>
                 </div>
@@ -653,8 +684,33 @@
             <!-- Strategy Compare -->
             <section id="compare-calculator" class="calculator-section">
                 <div class="section-header">
-                    <h2>Strategy Comparison</h2>
-                    <p>Compare PT vs YT vs LP vs Holding across different APY scenarios</p>
+                    <div class="section-header-main">
+                        <h2>Strategy Comparison</h2>
+                        <p>Compare PT vs YT vs LP vs Holding across different APY scenarios</p>
+                    </div>
+                    <button class="nav-link-btn" id="back-to-calculator-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Back to Calculator
+                    </button>
+                </div>
+
+                <!-- No Market Selected Prompt for Compare -->
+                <div class="no-market-prompt" id="no-market-prompt-compare">
+                    <div class="prompt-card">
+                        <div class="prompt-icon-large">⚖️</div>
+                        <h3>Select a Market to Compare Strategies</h3>
+                        <p>Choose a market from Live Markets to compare PT, YT, LP, and Hold strategies with real market data.</p>
+                        <button class="select-market-btn" id="select-market-btn-compare">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
+                            Browse Live Markets
+                        </button>
+                        <p class="prompt-hint">Or enter custom values below to compare manually</p>
+                    </div>
                 </div>
 
                 <div class="selected-market-banner" id="compare-market-banner" style="display: none;">
@@ -664,6 +720,15 @@
                             <span class="banner-name" id="compare-banner-name">-</span>
                             <span class="banner-expiry" id="compare-banner-expiry">-</span>
                         </div>
+                    </div>
+                    <div class="banner-actions">
+                        <button class="banner-action-btn" id="analyze-in-calculator">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                <path d="M9 17v-2a4 4 0 0 1 4-4h4"/>
+                                <path d="M13 7l4 4-4 4"/>
+                            </svg>
+                            Analyze in Calculator
+                        </button>
                     </div>
                 </div>
 
