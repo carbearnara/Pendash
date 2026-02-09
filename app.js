@@ -2039,6 +2039,246 @@ function updateOracleAnalysis() {
 
     oracleRiskSummary.innerHTML = `<span class="risk-icon">${riskIcon}</span><span class="risk-text">${riskText}</span>`;
     oracleRiskSummary.className = riskSummaryClass;
+
+    // Fetch and render oracle price chart
+    fetchAndRenderOraclePriceChart();
+}
+
+// Chart instance for oracle price
+let oraclePriceChart = null;
+
+// Fetch historical data and render oracle price chart
+async function fetchAndRenderOraclePriceChart() {
+    const chartContainer = document.getElementById('oracle-chart-container');
+    const chartLoading = document.getElementById('oracle-chart-loading');
+    const chartCanvas = document.getElementById('oracle-price-chart');
+    const chartStats = document.getElementById('oracle-chart-stats');
+
+    if (!selectedMarket || !chartContainer) return;
+
+    // Show loading state
+    if (chartLoading) chartLoading.style.display = 'block';
+    if (chartCanvas) chartCanvas.style.display = 'none';
+    if (chartStats) chartStats.style.display = 'none';
+
+    try {
+        const chainId = parseInt(document.getElementById('chain-filter')?.value) || 1;
+        const history = await fetchHistoricalData(selectedMarket.address, chainId);
+
+        if (!history || !history.rawData || history.rawData.length === 0) {
+            if (chartLoading) chartLoading.textContent = 'No historical data available';
+            return;
+        }
+
+        // Calculate PT prices from implied APY
+        const ptPriceData = history.rawData.map(d => {
+            const impliedApy = (d.impliedApy || 0);
+            const timestamp = new Date(d.timestamp);
+            const now = new Date();
+            const maturityDate = new Date(now.getTime() + selectedMarket.days * 24 * 60 * 60 * 1000);
+            const daysAtPoint = Math.max(1, (maturityDate - timestamp) / (24 * 60 * 60 * 1000));
+
+            // PT Price = 1 / (1 + impliedAPY * days/365)
+            const ptPrice = 1 / (1 + impliedApy * (daysAtPoint / 365));
+            return {
+                timestamp: d.timestamp,
+                ptPrice: Math.min(1, Math.max(0, ptPrice)), // Clamp between 0 and 1
+                impliedApy: impliedApy * 100
+            };
+        });
+
+        // Calculate stats
+        const prices = ptPriceData.map(d => d.ptPrice);
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+        const currentPrice = prices[prices.length - 1];
+        const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+        const variance = prices.reduce((sum, p) => sum + Math.pow(p - avgPrice, 2), 0) / prices.length;
+        const stdDev = Math.sqrt(variance);
+        const volatility = (stdDev / avgPrice) * 100; // Coefficient of variation as percentage
+
+        // Update stats display
+        document.getElementById('oracle-price-current').textContent = currentPrice.toFixed(4);
+        document.getElementById('oracle-price-min').textContent = minPrice.toFixed(4);
+        document.getElementById('oracle-price-max').textContent = maxPrice.toFixed(4);
+        document.getElementById('oracle-price-volatility').textContent = volatility.toFixed(2) + '%';
+
+        // Color volatility based on risk
+        const volatilityEl = document.getElementById('oracle-price-volatility');
+        if (volatility < 1) {
+            volatilityEl.style.color = 'var(--profit-color)';
+        } else if (volatility < 3) {
+            volatilityEl.style.color = 'var(--pt-color)';
+        } else if (volatility < 5) {
+            volatilityEl.style.color = 'var(--warning-color)';
+        } else {
+            volatilityEl.style.color = 'var(--loss-color)';
+        }
+
+        // Render chart
+        renderOraclePriceChart(ptPriceData);
+
+        // Show chart elements
+        if (chartLoading) chartLoading.style.display = 'none';
+        if (chartCanvas) chartCanvas.style.display = 'block';
+        if (chartStats) chartStats.style.display = 'flex';
+
+    } catch (e) {
+        console.error('Failed to fetch oracle price history:', e);
+        if (chartLoading) chartLoading.textContent = 'Failed to load historical data';
+    }
+}
+
+// Render the oracle price chart
+function renderOraclePriceChart(data) {
+    const ctx = document.getElementById('oracle-price-chart');
+    if (!ctx || !data || data.length === 0) return;
+
+    const labels = data.map(d => {
+        const date = new Date(d.timestamp);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+
+    const ptPrices = data.map(d => d.ptPrice);
+    const impliedApys = data.map(d => d.impliedApy);
+
+    // Calculate 7-day moving average for PT price
+    const ptPrice7dMA = calculateMovingAverage(ptPrices, 7);
+
+    // Destroy existing chart
+    if (oraclePriceChart) {
+        oraclePriceChart.destroy();
+    }
+
+    oraclePriceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'PT Price',
+                    data: ptPrices,
+                    borderColor: '#F59E0B',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'PT Price 7D MA',
+                    data: ptPrice7dMA,
+                    borderColor: '#2DD4BF',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Implied APY %',
+                    data: impliedApys,
+                    borderColor: '#A78BFA',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    fill: false,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    borderDash: [4, 2],
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: '#9CA3AF',
+                        usePointStyle: true,
+                        pointStyle: 'line',
+                        padding: 15,
+                        font: { size: 11 }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: '#1A1A1A',
+                    titleColor: '#FFFFFF',
+                    bodyColor: '#9CA3AF',
+                    borderColor: '#2A2A2A',
+                    borderWidth: 1,
+                    padding: 10,
+                    callbacks: {
+                        label: function(context) {
+                            if (context.datasetIndex === 2) {
+                                return `Implied APY: ${context.raw.toFixed(2)}%`;
+                            }
+                            return `${context.dataset.label}: ${context.raw.toFixed(4)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: {
+                        color: '#6B7280',
+                        maxTicksLimit: 8,
+                        font: { size: 10 }
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'PT Price',
+                        color: '#F59E0B',
+                        font: { size: 11 }
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: {
+                        color: '#F59E0B',
+                        font: { size: 10 },
+                        callback: function(value) {
+                            return value.toFixed(3);
+                        }
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Implied APY %',
+                        color: '#A78BFA',
+                        font: { size: 11 }
+                    },
+                    grid: { drawOnChartArea: false },
+                    ticks: {
+                        color: '#A78BFA',
+                        font: { size: 10 },
+                        callback: function(value) {
+                            return value.toFixed(0) + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 // Update loop calculator results

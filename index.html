@@ -298,6 +298,29 @@
                                     <span class="risk-icon">-</span>
                                     <span class="risk-text">-</span>
                                 </div>
+                                <div class="oracle-chart-container" id="oracle-chart-container">
+                                    <h4>PT Price History (90 Days)</h4>
+                                    <div class="oracle-chart-loading" id="oracle-chart-loading">Loading historical data...</div>
+                                    <canvas id="oracle-price-chart"></canvas>
+                                    <div class="oracle-chart-stats" id="oracle-chart-stats">
+                                        <div class="chart-stat">
+                                            <span class="stat-label">Current</span>
+                                            <span class="stat-value" id="oracle-price-current">-</span>
+                                        </div>
+                                        <div class="chart-stat">
+                                            <span class="stat-label">90D Min</span>
+                                            <span class="stat-value" id="oracle-price-min">-</span>
+                                        </div>
+                                        <div class="chart-stat">
+                                            <span class="stat-label">90D Max</span>
+                                            <span class="stat-value" id="oracle-price-max">-</span>
+                                        </div>
+                                        <div class="chart-stat">
+                                            <span class="stat-label">Volatility</span>
+                                            <span class="stat-value" id="oracle-price-volatility">-</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="looping-card calculator-card">
