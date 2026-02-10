@@ -146,6 +146,13 @@ const historyCache = new Map();
 // Cache for harmonized historical data (merged across maturities)
 const harmonizedHistoryCache = new Map();
 
+// Platform URLs for loop opportunities
+const LOOP_PLATFORM_URLS = {
+    aave: 'https://app.aave.com/',
+    morpho: 'https://app.morpho.org/',
+    euler: 'https://app.euler.finance/'
+};
+
 // Known PT-Lending pairs with real market data
 // These are VERIFIED PT (Pendle Principal Token) collateral integrations on lending protocols
 // Only includes markets where PT-<asset> is accepted as collateral, NOT the underlying asset
@@ -154,6 +161,7 @@ const KNOWN_PT_LENDING_PAIRS = {
     // Source: https://governance.aave.com/t/arfc-onboard-susde-july-expiry-pt-tokens-on-aave-v3-core-instance/21878
     'sUSDe': {
         platform: 'Aave V3 / Morpho / Euler',
+        platforms: ['aave', 'morpho', 'euler'],
         ltv: 0.91,
         borrowRate: 5.5,
         borrowAsset: 'USDC',
@@ -171,6 +179,7 @@ const KNOWN_PT_LENDING_PAIRS = {
     // Source: https://governance.aave.com/t/arfc-onboard-eusde-pt-tokens-to-aave-v3-core-instance/21767
     'eUSDe': {
         platform: 'Aave V3 / Morpho',
+        platforms: ['aave', 'morpho'],
         ltv: 0.86,
         borrowRate: 5.2,
         borrowAsset: 'USDC',
@@ -188,6 +197,7 @@ const KNOWN_PT_LENDING_PAIRS = {
     // Source: https://x.com/eulerfinance/status/1876699048859623594
     'USDe': {
         platform: 'Morpho / Euler',
+        platforms: ['morpho', 'euler'],
         ltv: 0.77,
         borrowRate: 5.0,
         borrowAsset: 'USDC',
@@ -205,6 +215,7 @@ const KNOWN_PT_LENDING_PAIRS = {
     // Source: https://forum.euler.finance/t/integrate-pt-tusde-25sep2025-on-euler-yield/1548
     'tUSDe': {
         platform: 'Euler',
+        platforms: ['euler'],
         ltv: 0.88,
         borrowRate: 5.0,
         borrowAsset: 'USDC',
@@ -222,6 +233,7 @@ const KNOWN_PT_LENDING_PAIRS = {
     // Source: https://x.com/eulerfinance/status/1876699048859623594
     'USD0++': {
         platform: 'Morpho / Euler',
+        platforms: ['morpho', 'euler'],
         ltv: 0.86,
         borrowRate: 5.5,
         borrowAsset: 'USDC',
@@ -239,6 +251,7 @@ const KNOWN_PT_LENDING_PAIRS = {
     // Source: https://dune.com/queries/4366361 (Morpho vaults with Pendle PT)
     'lvlUSD': {
         platform: 'Morpho',
+        platforms: ['morpho'],
         ltv: 0.80,
         borrowRate: 5.0,
         borrowAsset: 'USDC',
@@ -257,6 +270,7 @@ const KNOWN_PT_LENDING_PAIRS = {
     // Source: https://app.morpho.org/ethereum/market/.../pt-lbtc-27mar2025-lbtc
     'LBTC': {
         platform: 'Morpho',
+        platforms: ['morpho'],
         ltv: 0.915,
         borrowRate: 3.0,
         borrowAsset: 'LBTC/tBTC/cbBTC',
@@ -274,6 +288,7 @@ const KNOWN_PT_LENDING_PAIRS = {
     // Source: https://www.eblockmedia.com/news/articleView.html?idxno=13014
     'SolvBTC': {
         platform: 'Morpho',
+        platforms: ['morpho'],
         ltv: 0.915,
         borrowRate: 3.5,
         borrowAsset: 'SolvBTC',
@@ -291,7 +306,8 @@ const KNOWN_PT_LENDING_PAIRS = {
     // ===== SONIC CHAIN (VERIFIED) =====
     // Source: https://outposts.io/article/pendle-principal-tokens-now-available-as-collateral-on-euler
     'wstkscUSD': {
-        platform: 'Euler Sonic / Silo',
+        platform: 'Euler',
+        platforms: ['euler'],
         ltv: 0.88,
         borrowRate: 5.0,
         borrowAsset: 'scUSD',
@@ -308,7 +324,8 @@ const KNOWN_PT_LENDING_PAIRS = {
     },
     // Source: https://outposts.io/article/pendle-principal-tokens-now-available-as-collateral-on-euler
     'wstkscETH': {
-        platform: 'Euler Sonic',
+        platform: 'Euler',
+        platforms: ['euler'],
         ltv: 0.80,
         borrowRate: 3.0,
         borrowAsset: 'scETH',
@@ -325,7 +342,8 @@ const KNOWN_PT_LENDING_PAIRS = {
     },
     // Source: https://yielddev.io/deep-delta-neutral-fixed-pt-yield-on-sonic-with-euler
     'stS': {
-        platform: 'Euler Sonic',
+        platform: 'Euler',
+        platforms: ['euler'],
         ltv: 0.915,
         borrowRate: 4.0,
         borrowAsset: 'S',
@@ -343,7 +361,8 @@ const KNOWN_PT_LENDING_PAIRS = {
     // ===== BERACHAIN (VERIFIED) =====
     // Source: https://infrared.finance/blog/ibgt-and-ibera-live-on-pendle
     'iBGT': {
-        platform: 'Dolomite / Timeswap',
+        platform: 'Dolomite',
+        platforms: [],
         ltv: 0.75,
         borrowRate: 8.0,
         borrowAsset: 'HONEY',
@@ -424,6 +443,18 @@ function findLoopOpportunity(market, chainId) {
     }
 
     return null;
+}
+
+// Get loop platforms for a market
+function getLoopPlatforms(market) {
+    const marketName = (market.name || market.proName || '').toUpperCase();
+
+    for (const [assetName, pairData] of Object.entries(KNOWN_PT_LENDING_PAIRS)) {
+        if (marketName.includes(assetName.toUpperCase())) {
+            return pairData.platforms || [];
+        }
+    }
+    return [];
 }
 
 // Analyze historical data for potential watermark breaches
@@ -1658,6 +1689,32 @@ function populateCalculatorFromMarket(market, chainId) {
         document.getElementById('pendle-pt-link').href = pendleUrls.pt;
         document.getElementById('pendle-yt-link').href = pendleUrls.yt;
         document.getElementById('pendle-lp-link').href = pendleUrls.lp;
+
+        // Update loop platform links if loop opportunity exists
+        const loopLinks = document.getElementById('loop-links');
+        const aaveLink = document.getElementById('loop-aave-link');
+        const morphoLink = document.getElementById('loop-morpho-link');
+        const eulerLink = document.getElementById('loop-euler-link');
+
+        if (loopLinks && market.loopOpportunity) {
+            const platforms = getLoopPlatforms(market);
+            loopLinks.style.display = platforms.length > 0 ? 'inline' : 'none';
+
+            if (aaveLink) {
+                aaveLink.style.display = platforms.includes('aave') ? 'inline' : 'none';
+                aaveLink.href = LOOP_PLATFORM_URLS.aave;
+            }
+            if (morphoLink) {
+                morphoLink.style.display = platforms.includes('morpho') ? 'inline' : 'none';
+                morphoLink.href = LOOP_PLATFORM_URLS.morpho;
+            }
+            if (eulerLink) {
+                eulerLink.style.display = platforms.includes('euler') ? 'inline' : 'none';
+                eulerLink.href = LOOP_PLATFORM_URLS.euler;
+            }
+        } else if (loopLinks) {
+            loopLinks.style.display = 'none';
+        }
     }
 
     if (compareBanner) {

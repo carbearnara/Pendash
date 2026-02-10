@@ -906,6 +906,29 @@ body {
     color: var(--bg-primary);
 }
 
+.pendle-link.loop-link {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--loop-color);
+    border-color: var(--loop-color);
+}
+
+.pendle-link.loop-link:hover {
+    background: var(--loop-color);
+    color: var(--bg-primary);
+}
+
+.loop-links {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.loop-divider {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: 0 4px;
+}
+
 /* Calculator Grid */
 .calculator-grid {
     display: grid;
