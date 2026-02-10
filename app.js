@@ -3,11 +3,69 @@
 const PENDLE_FEE = 0.05; // 5% fee on YT yield
 const API_BASE = 'https://api-v2.pendle.finance/core';
 
-// CORS proxy for API fallback (used for historical data and protocol verification)
+// CORS proxy for API fallback (used for historical data)
 const CORS_PROXIES = [
     (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
 ];
+
+// LocalStorage caching configuration
+const CACHE_CONFIG = {
+    markets: { key: 'pendash_markets', ttl: 5 * 60 * 1000 },      // 5 minutes
+    history: { key: 'pendash_history', ttl: 60 * 60 * 1000 },     // 1 hour
+    harmonized: { key: 'pendash_harmonized', ttl: 60 * 60 * 1000 } // 1 hour
+};
+
+// LocalStorage cache utilities
+const storage = {
+    get(key) {
+        try {
+            const item = localStorage.getItem(key);
+            if (!item) return null;
+            const { data, timestamp, ttl } = JSON.parse(item);
+            if (Date.now() - timestamp > ttl) {
+                localStorage.removeItem(key);
+                return null;
+            }
+            return data;
+        } catch (e) {
+            return null;
+        }
+    },
+
+    set(key, data, ttl) {
+        try {
+            const item = { data, timestamp: Date.now(), ttl };
+            localStorage.setItem(key, JSON.stringify(item));
+        } catch (e) {
+            // Storage full or unavailable - clear old cache
+            this.clearOld();
+            try {
+                localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now(), ttl }));
+            } catch (e2) {
+                console.log('LocalStorage unavailable');
+            }
+        }
+    },
+
+    clearOld() {
+        try {
+            // Clear all pendash cache entries
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('pendash_')) {
+                    localStorage.removeItem(key);
+                }
+            });
+        } catch (e) {}
+    },
+
+    clearAll() {
+        this.clearOld();
+        historyCache.clear();
+        harmonizedHistoryCache.clear();
+        watermarkCache.clear();
+    }
+};
 
 // RPC endpoints for different chains
 const RPC_ENDPOINTS = {
@@ -88,116 +146,6 @@ const historyCache = new Map();
 // Cache for harmonized historical data (merged across maturities)
 const harmonizedHistoryCache = new Map();
 
-// Cache for protocol verification data
-const protocolApyCache = new Map();
-
-// Protocol APY sources for on-chain verification
-const PROTOCOL_APY_SOURCES = {
-    // Lido - stETH/wstETH
-    'stETH': {
-        name: 'Lido',
-        url: 'https://eth-api.lido.fi/v1/protocol/steth/apr/sma',
-        parser: (data) => parseFloat(data?.data?.smaApr || 0) / 100,
-        assets: ['stETH', 'wstETH']
-    },
-    // Rocket Pool - rETH
-    'rETH': {
-        name: 'Rocket Pool',
-        url: 'https://api.rocketpool.net/api/mainnet/payload',
-        parser: (data) => parseFloat(data?.rethAPR || 0) / 100,
-        assets: ['rETH']
-    },
-    // Ethena - sUSDe/USDe
-    'sUSDe': {
-        name: 'Ethena',
-        url: 'https://ethena.fi/api/yields/protocol-and-staking-yield',
-        parser: (data) => parseFloat(data?.stakingYield?.value || 0) / 100,
-        assets: ['sUSDe', 'USDe']
-    },
-    // EtherFi - weETH/eETH
-    'weETH': {
-        name: 'EtherFi',
-        url: 'https://www.etherfi.bid/api/etherfi/apr',
-        parser: (data) => parseFloat(data?.latest_aprs?.staking_apr || data?.apr || 0) / 100,
-        assets: ['weETH', 'eETH', 'weETHs']
-    },
-    // Frax - sfrxETH
-    'sfrxETH': {
-        name: 'Frax',
-        url: 'https://api.frax.finance/v2/frxeth/summary/latest',
-        parser: (data) => parseFloat(data?.sfrxethApr || 0) / 100,
-        assets: ['sfrxETH', 'frxETH']
-    },
-    // Coinbase - cbETH
-    'cbETH': {
-        name: 'Coinbase',
-        url: 'https://api.exchange.coinbase.com/wrapped-assets/CBETH/',
-        parser: (data) => parseFloat(data?.apy || 0),
-        assets: ['cbETH']
-    }
-};
-
-// Find protocol source for an asset
-function findProtocolSource(assetName) {
-    const upperName = (assetName || '').toUpperCase();
-    for (const [key, source] of Object.entries(PROTOCOL_APY_SOURCES)) {
-        for (const asset of source.assets) {
-            if (upperName.includes(asset.toUpperCase())) {
-                return { key, ...source };
-            }
-        }
-    }
-    return null;
-}
-
-// Fetch verified APY from protocol source
-async function fetchProtocolApy(source) {
-    if (protocolApyCache.has(source.key)) {
-        return protocolApyCache.get(source.key);
-    }
-
-    try {
-        let response = null;
-        let data = null;
-
-        // Try direct fetch first
-        try {
-            response = await fetch(source.url);
-            if (response.ok) {
-                data = await response.json();
-            }
-        } catch (e) {
-            console.log(`Direct fetch failed for ${source.name}, trying proxy...`);
-        }
-
-        // Try with CORS proxy
-        if (!data) {
-            for (const proxyFn of CORS_PROXIES) {
-                try {
-                    response = await fetch(proxyFn(source.url));
-                    if (response.ok) {
-                        data = await response.json();
-                        if (data) break;
-                    }
-                } catch (e) {
-                    continue;
-                }
-            }
-        }
-
-        if (data) {
-            const apy = source.parser(data);
-            const result = { apy, source: source.name, timestamp: Date.now() };
-            protocolApyCache.set(source.key, result);
-            return result;
-        }
-    } catch (e) {
-        console.error(`Failed to fetch ${source.name} APY:`, e);
-    }
-    return null;
-}
-
-// Fetch Aave V3 reserves data for a chain
 // Known PT-Lending pairs with real market data
 // These are VERIFIED PT (Pendle Principal Token) collateral integrations on lending protocols
 // Only includes markets where PT-<asset> is accepted as collateral, NOT the underlying asset
@@ -478,35 +426,6 @@ function findLoopOpportunity(market, chainId) {
     return null;
 }
 
-// Verify Pendle's underlying APY against protocol source
-async function verifyUnderlyingApy(market) {
-    const source = findProtocolSource(market.name);
-    if (!source) {
-        return { verified: false, reason: 'No protocol source available' };
-    }
-
-    const protocolData = await fetchProtocolApy(source);
-    if (!protocolData) {
-        return { verified: false, reason: `Could not fetch ${source.name} data` };
-    }
-
-    const pendleApy = market.underlyingApyPercent;
-    const protocolApy = protocolData.apy * 100;
-    const difference = Math.abs(pendleApy - protocolApy);
-    const percentDiff = protocolApy > 0 ? (difference / protocolApy) * 100 : 0;
-
-    return {
-        verified: true,
-        source: protocolData.source,
-        protocolApy,
-        pendleApy,
-        difference,
-        percentDiff,
-        matches: percentDiff < 10, // Within 10% is considered matching
-        timestamp: protocolData.timestamp
-    };
-}
-
 // Analyze historical data for potential watermark breaches
 // When underlying APY drops significantly or goes negative, it may indicate exchange rate issues
 function analyzeWatermarkHistory(historyData, marketName) {
@@ -714,8 +633,18 @@ function calculateImpliedAPY(ytPrice, ptPrice, daysToMaturity) {
 // Fetch historical yield data for a market
 async function fetchHistoricalData(marketAddress, chainId = 1) {
     const cacheKey = `${chainId}-${marketAddress}`;
+
+    // Check memory cache first
     if (historyCache.has(cacheKey)) {
         return historyCache.get(cacheKey);
+    }
+
+    // Check localStorage cache
+    const storageCacheKey = `${CACHE_CONFIG.history.key}_${cacheKey}`;
+    const cached = storage.get(storageCacheKey);
+    if (cached) {
+        historyCache.set(cacheKey, cached);
+        return cached;
     }
 
     try {
@@ -797,6 +726,8 @@ async function fetchHistoricalData(marketAddress, chainId = 1) {
         };
 
         historyCache.set(cacheKey, history);
+        // Save to localStorage
+        storage.set(storageCacheKey, history, CACHE_CONFIG.history.ttl);
         return history;
     } catch (e) {
         console.error('Failed to fetch historical data:', e);
@@ -828,13 +759,19 @@ async function fetchHarmonizedHistoricalData(market, chainId = 1) {
     }
 
     const cacheKey = `harmonized-${chainId}-${syAddress}`;
+
+    // Check memory cache first
     if (harmonizedHistoryCache.has(cacheKey)) {
         const cached = harmonizedHistoryCache.get(cacheKey);
-        // Add current market's implied APY data
-        return {
-            ...cached,
-            currentMarketAddress: market.address
-        };
+        return { ...cached, currentMarketAddress: market.address };
+    }
+
+    // Check localStorage cache
+    const storageCacheKey = `${CACHE_CONFIG.harmonized.key}_${cacheKey}`;
+    const storageCached = storage.get(storageCacheKey);
+    if (storageCached) {
+        harmonizedHistoryCache.set(cacheKey, storageCached);
+        return { ...storageCached, currentMarketAddress: market.address };
     }
 
     try {
@@ -940,6 +877,8 @@ async function fetchHarmonizedHistoricalData(market, chainId = 1) {
         };
 
         harmonizedHistoryCache.set(cacheKey, harmonizedHistory);
+        // Save to localStorage
+        storage.set(storageCacheKey, harmonizedHistory, CACHE_CONFIG.harmonized.ttl);
         return harmonizedHistory;
 
     } catch (e) {
@@ -1040,86 +979,6 @@ function calculateSharpeRatios(ptFixedApy, underlyingApy, impliedApy, volatility
         pt: { sharpe: ptSharpe, volatility: ptVolatility, excessReturn: ptExcessReturn },
         yt: { sharpe: ytSharpe, volatility: ytVolatility, excessReturn: ytExpectedReturn }
     };
-}
-
-// ETH price cache for correlation calculation
-let ethPriceHistory = null;
-
-// Fetch ETH price history
-async function fetchEthPriceHistory() {
-    if (ethPriceHistory) return ethPriceHistory;
-
-    try {
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=90');
-        if (response.ok) {
-            const data = await response.json();
-            ethPriceHistory = data.prices.map(([timestamp, price]) => ({
-                timestamp: new Date(timestamp).toISOString().split('T')[0],
-                price
-            }));
-            return ethPriceHistory;
-        }
-    } catch (e) {
-        console.log('Failed to fetch ETH prices:', e.message);
-    }
-    return null;
-}
-
-// Calculate correlation between yield and ETH price
-function calculateCorrelation(yieldData, priceData) {
-    if (!yieldData || !priceData || yieldData.length < 10) return null;
-
-    // Align data by date
-    const priceMap = new Map(priceData.map(p => [p.timestamp, p.price]));
-    const aligned = [];
-
-    for (const point of yieldData) {
-        const date = new Date(point.timestamp).toISOString().split('T')[0];
-        const price = priceMap.get(date);
-        if (price && point.underlyingApy) {
-            aligned.push({
-                yield: point.underlyingApy * 100,
-                price
-            });
-        }
-    }
-
-    if (aligned.length < 10) return null;
-
-    // Calculate Pearson correlation
-    const n = aligned.length;
-    const sumX = aligned.reduce((s, p) => s + p.yield, 0);
-    const sumY = aligned.reduce((s, p) => s + p.price, 0);
-    const sumXY = aligned.reduce((s, p) => s + p.yield * p.price, 0);
-    const sumX2 = aligned.reduce((s, p) => s + p.yield * p.yield, 0);
-    const sumY2 = aligned.reduce((s, p) => s + p.price * p.price, 0);
-
-    const numerator = n * sumXY - sumX * sumY;
-    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
-
-    if (denominator === 0) return null;
-
-    const correlation = numerator / denominator;
-
-    let interpretation, color;
-    if (correlation > 0.5) {
-        interpretation = 'Strong positive correlation with ETH. Yield likely to drop in bear markets.';
-        color = 'var(--loss-color)';
-    } else if (correlation > 0.2) {
-        interpretation = 'Moderate positive correlation with ETH.';
-        color = 'var(--text-secondary)';
-    } else if (correlation < -0.5) {
-        interpretation = 'Negative correlation with ETH. Yield may rise in bear markets (hedge).';
-        color = 'var(--profit-color)';
-    } else if (correlation < -0.2) {
-        interpretation = 'Slight negative correlation with ETH.';
-        color = 'var(--text-secondary)';
-    } else {
-        interpretation = 'Low correlation with ETH price. Yield is relatively independent.';
-        color = 'var(--text-secondary)';
-    }
-
-    return { correlation, interpretation, color };
 }
 
 // Get cross-asset comparison data
@@ -1283,10 +1142,31 @@ const SAMPLE_MARKETS = [
     { address: '0xc', name: 'uniETH', proName: 'uniETH (PT Opportunity)', expiry: '2026-06-25', underlyingApy: 0.0281, impliedApy: 0.0421, liquidity: { usd: 532000 }, proIcon: '' },
 ];
 
+// Process and render cached markets
+function processAndRenderMarkets(chainId) {
+    const refreshBtn = document.getElementById('refresh-markets');
+    refreshBtn?.classList.remove('loading');
+    renderMarkets();
+    // Check watermarks in background
+    checkAllWatermarks(markets);
+}
+
 // Fetch markets from Pendle API
-async function fetchMarkets(chainId = 1) {
+async function fetchMarkets(chainId = 1, forceRefresh = false) {
     const marketsContainer = document.getElementById('markets-list');
     const refreshBtn = document.getElementById('refresh-markets');
+    const cacheKey = `${CACHE_CONFIG.markets.key}_${chainId}`;
+
+    // Check localStorage cache first (unless force refresh)
+    if (!forceRefresh) {
+        const cached = storage.get(cacheKey);
+        if (cached) {
+            console.log(`Using cached markets for chain ${chainId}`);
+            markets = cached;
+            processAndRenderMarkets(chainId);
+            return;
+        }
+    }
 
     refreshBtn?.classList.add('loading');
     marketsContainer.innerHTML = '<div class="loading">Loading markets...</div>';
@@ -1457,6 +1337,10 @@ async function fetchMarkets(chainId = 1) {
                 zeroYieldReason
             };
         }).filter(m => m.days > 0);
+
+        // Save to localStorage cache
+        storage.set(cacheKey, markets, CACHE_CONFIG.markets.ttl);
+        console.log(`Cached ${markets.length} markets for chain ${chainId}`);
 
         renderMarkets();
 
@@ -2761,90 +2645,7 @@ async function loadHistoricalData(market) {
         `;
     }
 
-    // 4. ETH Correlation Analysis
-    const correlationEl = document.getElementById('correlation-analysis');
-    if (correlationEl && history.rawData) {
-        // Fetch ETH prices and calculate correlation
-        fetchEthPriceHistory().then(ethPrices => {
-            if (ethPrices) {
-                const correlation = calculateCorrelation(history.rawData, ethPrices);
-                if (correlation) {
-                    correlationEl.innerHTML = `
-                        <div class="analysis-signal" style="color: ${correlation.color}">
-                            <span class="signal-icon">🔗</span>
-                            <span class="signal-text">ETH Correlation: ${correlation.correlation.toFixed(2)}</span>
-                        </div>
-                        <div class="correlation-bar">
-                            <div class="correlation-scale">
-                                <span>-1</span>
-                                <span>0</span>
-                                <span>+1</span>
-                            </div>
-                            <div class="correlation-track">
-                                <div class="correlation-marker" style="left: ${((correlation.correlation + 1) / 2) * 100}%"></div>
-                            </div>
-                        </div>
-                        <div class="analysis-detail">${correlation.interpretation}</div>
-                    `;
-                } else {
-                    correlationEl.innerHTML = `<div class="analysis-detail">Insufficient data for correlation analysis</div>`;
-                }
-            } else {
-                correlationEl.innerHTML = `<div class="analysis-detail">ETH price data unavailable</div>`;
-            }
-        });
-    }
-
-    // 5. Protocol Verification
-    const verificationEl = document.getElementById('verification-analysis');
-    if (verificationEl) {
-        verificationEl.innerHTML = `<div class="analysis-detail">Verifying with protocol source...</div>`;
-
-        verifyUnderlyingApy(market).then(verification => {
-            if (verification.verified) {
-                const statusIcon = verification.matches ? '✅' : '⚠️';
-                const statusColor = verification.matches ? 'var(--profit-color)' : 'var(--warning-color)';
-                const statusText = verification.matches ? 'Verified' : 'Divergence detected';
-
-                verificationEl.innerHTML = `
-                    <div class="analysis-signal" style="color: ${statusColor}">
-                        <span class="signal-icon">${statusIcon}</span>
-                        <span class="signal-text">${statusText}</span>
-                    </div>
-                    <div class="verification-comparison">
-                        <div class="verification-row">
-                            <span class="verification-label">Pendle API:</span>
-                            <span class="verification-value">${formatPercent(verification.pendleApy)}</span>
-                        </div>
-                        <div class="verification-row">
-                            <span class="verification-label">${verification.source}:</span>
-                            <span class="verification-value">${formatPercent(verification.protocolApy)}</span>
-                        </div>
-                        <div class="verification-row">
-                            <span class="verification-label">Difference:</span>
-                            <span class="verification-value ${verification.matches ? '' : 'warning'}">${verification.difference.toFixed(3)}% (${verification.percentDiff.toFixed(1)}%)</span>
-                        </div>
-                    </div>
-                    <div class="analysis-detail">
-                        ${verification.matches
-                            ? `Data verified against ${verification.source}'s official API`
-                            : `Pendle data differs from ${verification.source} by ${verification.percentDiff.toFixed(1)}% - may use different calculation methods`
-                        }
-                    </div>
-                `;
-            } else {
-                verificationEl.innerHTML = `
-                    <div class="analysis-signal" style="color: var(--text-muted)">
-                        <span class="signal-icon">❓</span>
-                        <span class="signal-text">Cannot verify</span>
-                    </div>
-                    <div class="analysis-detail">${verification.reason}</div>
-                `;
-            }
-        });
-    }
-
-    // 6. Watermark History Analysis
+    // 4. Watermark History Analysis
     const watermarkHistoryEl = document.getElementById('watermark-history-analysis');
     if (watermarkHistoryEl) {
         const watermarkAnalysis = analyzeWatermarkHistory(history, market.name);
@@ -3251,7 +3052,7 @@ function initEventListeners() {
     });
     document.getElementById('refresh-markets')?.addEventListener('click', () => {
         const chainId = document.getElementById('chain-filter')?.value || 1;
-        fetchMarkets(chainId);
+        fetchMarkets(chainId, true); // Force refresh
     });
 
     // Clear selection
