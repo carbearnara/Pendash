@@ -3185,6 +3185,47 @@ function initToggle() {
 
 // Initialize event listeners
 function initEventListeners() {
+    // Logo home button - return to markets and reset state
+    document.getElementById('logo-home')?.addEventListener('click', (e) => {
+        e.preventDefault();
+
+        // Clear selected market
+        selectedMarket = null;
+        document.getElementById('selected-market-banner').style.display = 'none';
+        document.getElementById('compare-market-banner').style.display = 'none';
+        document.getElementById('history-card').style.display = 'none';
+        document.getElementById('loop-oracle-section').style.display = 'none';
+
+        // Reset URL
+        const url = new URL(window.location);
+        url.searchParams.delete('market');
+        url.searchParams.delete('chain');
+        window.history.pushState({}, '', url.pathname);
+
+        // Reset filters
+        const signalFilter = document.getElementById('signal-filter');
+        const searchInput = document.getElementById('search-filter');
+        if (signalFilter) signalFilter.value = 'all';
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.parentElement?.classList.remove('has-value');
+        }
+
+        // Reset legend filters
+        Object.keys(legendFilters).forEach(key => {
+            legendFilters[key] = true;
+        });
+        document.querySelectorAll('.legend-btn').forEach(btn => {
+            btn.classList.add('active');
+        });
+
+        // Switch to markets tab and refresh
+        switchTab('markets');
+        renderMarkets();
+        updateCalculator();
+        updateCompareCalculator();
+    });
+
     // Calculator inputs
     const calcInputs = ['calc-pt-price', 'calc-yt-price', 'calc-days', 'calc-underlying-apy', 'calc-expected-apy', 'calc-investment'];
     calcInputs.forEach(id => {
