@@ -399,8 +399,9 @@ async function fetchMorphoMarkets(chainIds = [1]) {
 // Known PT-Lending pairs with real market data
 // These are verified PT collateral integrations on lending protocols
 const KNOWN_PT_LENDING_PAIRS = {
+    // ===== ETHENA / USD STABLECOINS =====
     'sUSDe': {
-        platform: 'Morpho Blue',
+        platform: 'Morpho Blue / Euler',
         ltv: 0.915,
         borrowRate: 5.5,
         borrowAsset: 'USDC',
@@ -432,7 +433,7 @@ const KNOWN_PT_LENDING_PAIRS = {
         }
     },
     'USDe': {
-        platform: 'Morpho Blue',
+        platform: 'Morpho Blue / Euler',
         ltv: 0.77,
         borrowRate: 5.0,
         borrowAsset: 'USDC',
@@ -447,8 +448,57 @@ const KNOWN_PT_LENDING_PAIRS = {
             riskLevel: 'low'
         }
     },
+    'tUSDe': {
+        platform: 'Euler',
+        ltv: 0.88,
+        borrowRate: 5.0,
+        borrowAsset: 'USDC',
+        chains: [1],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle for tUSDe (Treehouse USDe). TWAP pricing.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
+    },
+    'USD0++': {
+        platform: 'Morpho Blue / Euler',
+        ltv: 0.86,
+        borrowRate: 5.5,
+        borrowAsset: 'USDC',
+        chains: [1],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle for USD0++ (Usual Protocol). TWAP pricing.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
+    },
+    'lvlUSD': {
+        platform: 'Morpho Blue',
+        ltv: 0.80,
+        borrowRate: 5.0,
+        borrowAsset: 'USDC',
+        chains: [1],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle for lvlUSD. TWAP pricing.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
+    },
+    // ===== ETH LSTs (Liquid Staking Tokens) =====
     'wstETH': {
-        platform: 'Aave V3',
+        platform: 'Aave V3 / Silo',
         ltv: 0.80,
         borrowRate: 2.5,
         borrowAsset: 'WETH',
@@ -463,8 +513,9 @@ const KNOWN_PT_LENDING_PAIRS = {
             riskLevel: 'very-low'
         }
     },
+    // ===== ETH LRTs (Liquid Restaking Tokens) =====
     'weETH': {
-        platform: 'Aave V3',
+        platform: 'Aave V3 / Silo',
         ltv: 0.725,
         borrowRate: 2.8,
         borrowAsset: 'WETH',
@@ -509,6 +560,234 @@ const KNOWN_PT_LENDING_PAIRS = {
             hardcoded: false,
             twapWindow: 'N/A',
             riskLevel: 'medium'
+        }
+    },
+    'pzETH': {
+        platform: 'Morpho Blue',
+        ltv: 0.75,
+        borrowRate: 3.0,
+        borrowAsset: 'WETH',
+        chains: [1],
+        oracle: {
+            type: 'Redstone',
+            provider: 'Redstone',
+            description: 'Uses Redstone oracle for pzETH (Renzo restaked ETH). Moderate track record.',
+            stability: 'medium',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'medium'
+        }
+    },
+    // ===== BTC LSTs/LRTs =====
+    'eBTC': {
+        platform: 'Morpho Blue',
+        ltv: 0.75,
+        borrowRate: 3.5,
+        borrowAsset: 'WBTC',
+        chains: [1],
+        oracle: {
+            type: 'Chainlink',
+            provider: 'Chainlink',
+            description: 'Uses Chainlink oracle for eBTC (EtherFi BTC). Established oracle.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'low'
+        }
+    },
+    'LBTC': {
+        platform: 'Morpho Blue',
+        ltv: 0.75,
+        borrowRate: 3.0,
+        borrowAsset: 'WBTC',
+        chains: [1],
+        oracle: {
+            type: 'Chainlink',
+            provider: 'Chainlink',
+            description: 'Uses Chainlink oracle for LBTC (Lombard staked BTC). Established oracle.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'low'
+        }
+    },
+    'uniBTC': {
+        platform: 'Morpho Blue',
+        ltv: 0.70,
+        borrowRate: 3.5,
+        borrowAsset: 'WBTC',
+        chains: [1],
+        oracle: {
+            type: 'Redstone',
+            provider: 'Redstone',
+            description: 'Uses Redstone oracle for uniBTC. Newer oracle, moderate track record.',
+            stability: 'medium',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'medium'
+        }
+    },
+    'SolvBTC': {
+        platform: 'Morpho Blue',
+        ltv: 0.70,
+        borrowRate: 3.5,
+        borrowAsset: 'WBTC',
+        chains: [1],
+        oracle: {
+            type: 'Redstone',
+            provider: 'Redstone',
+            description: 'Uses Redstone oracle for SolvBTC (Solv Protocol). Moderate track record.',
+            stability: 'medium',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'medium'
+        }
+    },
+    'pumpBTC': {
+        platform: 'Morpho Blue',
+        ltv: 0.70,
+        borrowRate: 3.5,
+        borrowAsset: 'WBTC',
+        chains: [1],
+        oracle: {
+            type: 'Redstone',
+            provider: 'Redstone',
+            description: 'Uses Redstone oracle for pumpBTC. Newer oracle, moderate track record.',
+            stability: 'medium',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'medium'
+        }
+    },
+    // ===== SONIC CHAIN =====
+    'stS': {
+        platform: 'Euler Sonic',
+        ltv: 0.85,
+        borrowRate: 4.0,
+        borrowAsset: 'S',
+        chains: [146],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle for stS (Beets staked Sonic). TWAP pricing.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
+    },
+    'wstkscUSD': {
+        platform: 'Euler Sonic / Silo',
+        ltv: 0.88,
+        borrowRate: 5.0,
+        borrowAsset: 'scUSD',
+        chains: [146],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle for wstkscUSD (Rings staked scUSD). TWAP pricing.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
+    },
+    'wstkscETH': {
+        platform: 'Euler Sonic',
+        ltv: 0.80,
+        borrowRate: 3.0,
+        borrowAsset: 'scETH',
+        chains: [146],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle for wstkscETH (Rings staked scETH). TWAP pricing.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
+    },
+    'scUSD': {
+        platform: 'Silo Sonic',
+        ltv: 0.85,
+        borrowRate: 5.0,
+        borrowAsset: 'USDC.e',
+        chains: [146],
+        oracle: {
+            type: 'PT-TWAP',
+            provider: 'Pendle',
+            description: 'Uses Pendle PT oracle for scUSD (Rings stablecoin). TWAP pricing.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: '30 min',
+            riskLevel: 'low'
+        }
+    },
+    // ===== BERACHAIN =====
+    'iBGT': {
+        platform: 'Dolomite / Timeswap',
+        ltv: 0.75,
+        borrowRate: 8.0,
+        borrowAsset: 'HONEY',
+        chains: [9745],
+        oracle: {
+            type: 'Custom',
+            provider: 'Infrared',
+            description: 'Uses Infrared oracle for iBGT. Newer market, higher volatility expected.',
+            stability: 'medium',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'medium'
+        }
+    },
+    'iBERA': {
+        platform: 'Dolomite',
+        ltv: 0.75,
+        borrowRate: 6.0,
+        borrowAsset: 'HONEY',
+        chains: [9745],
+        oracle: {
+            type: 'Custom',
+            provider: 'Infrared',
+            description: 'Uses Infrared oracle for iBERA. Newer market, higher volatility expected.',
+            stability: 'medium',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'medium'
+        }
+    },
+    // ===== ARBITRUM SPECIFIC =====
+    'GLP': {
+        platform: 'Silo',
+        ltv: 0.70,
+        borrowRate: 4.0,
+        borrowAsset: 'USDC',
+        chains: [42161],
+        oracle: {
+            type: 'GMX',
+            provider: 'GMX',
+            description: 'Uses GMX oracle for GLP pricing. Well-established on Arbitrum.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'low'
+        }
+    },
+    'GM': {
+        platform: 'Silo',
+        ltv: 0.65,
+        borrowRate: 4.5,
+        borrowAsset: 'USDC',
+        chains: [42161],
+        oracle: {
+            type: 'GMX',
+            provider: 'GMX',
+            description: 'Uses GMX oracle for GM tokens. Established oracle on Arbitrum.',
+            stability: 'high',
+            hardcoded: false,
+            twapWindow: 'N/A',
+            riskLevel: 'low'
         }
     },
 };
