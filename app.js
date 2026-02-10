@@ -821,18 +821,14 @@ async function fetchHarmonizedHistoricalData(market, chainId = 1) {
     }
 
     try {
-        // Find all markets with same underlying (limit to 5 to avoid slow fetches)
-        const relatedMarkets = findRelatedMarkets(market, chainId).slice(0, 5);
+        // Find all markets with same underlying
+        const relatedMarkets = findRelatedMarkets(market, chainId);
         console.log(`Found ${relatedMarkets.length} related markets for ${market.pt?.proName || market.name}`);
 
-        // Fetch historical data from all related markets in parallel with timeout
-        const fetchWithTimeout = (m) => {
-            return Promise.race([
-                fetchHistoricalData(m.address, chainId),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
-            ]).catch(() => null);
-        };
-        const historyPromises = relatedMarkets.map(fetchWithTimeout);
+        // Fetch historical data from all related markets in parallel
+        const historyPromises = relatedMarkets.map(m =>
+            fetchHistoricalData(m.address, chainId).catch(() => null)
+        );
         const histories = await Promise.all(historyPromises);
 
         // Merge underlying APY data by date (deduplicate)
@@ -1123,56 +1119,32 @@ async function checkWatermarkStatus(ytAddress, chainId) {
     }
 }
 
-// Check watermarks for all markets (in background, parallel batches)
+// Check watermarks for all markets (in background)
 async function checkAllWatermarks(marketsToCheck) {
     const chainId = document.getElementById('chain-filter')?.value || 1;
-    const BATCH_SIZE = 5; // Check 5 markets at a time
 
-    // Prepare market addresses
-    const marketsWithYt = marketsToCheck.map(market => {
+    for (const market of marketsToCheck) {
+        // Extract YT address from the market data
+        // The yt field is formatted as "chainId-address"
         let ytAddress = market.yt;
         if (typeof ytAddress === 'string' && ytAddress.includes('-')) {
             ytAddress = ytAddress.split('-')[1];
         }
-        return { market, ytAddress };
-    }).filter(m => m.ytAddress && m.ytAddress.startsWith('0x'));
 
-    // Process in batches
-    for (let i = 0; i < marketsWithYt.length; i += BATCH_SIZE) {
-        const batch = marketsWithYt.slice(i, i + BATCH_SIZE);
-
-        // Check batch in parallel with timeout
-        const results = await Promise.all(
-            batch.map(async ({ market, ytAddress }) => {
-                try {
-                    const status = await Promise.race([
-                        checkWatermarkStatus(ytAddress, parseInt(chainId)),
-                        new Promise(resolve => setTimeout(() => resolve(null), 3000)) // 3s timeout per check
-                    ]);
-                    return { market, status };
-                } catch {
-                    return { market, status: null };
-                }
-            })
-        );
-
-        // Update markets with results
-        let foundBelow = false;
-        for (const { market, status } of results) {
+        if (ytAddress && ytAddress.startsWith('0x')) {
+            const status = await checkWatermarkStatus(ytAddress, parseInt(chainId));
             if (status) {
                 market.watermarkStatus = status;
+                // Re-render if below watermark
                 if (status.belowWatermark) {
                     console.log(`${market.name} is BELOW watermark! Ratio: ${status.ratio.toFixed(4)}`);
-                    foundBelow = true;
                 }
             }
         }
-
-        // Only re-render if we found something important
-        if (foundBelow) {
-            renderMarkets();
-        }
     }
+
+    // Re-render markets with watermark info
+    renderMarkets();
 }
 
 // Determine market signal (PT opportunity vs YT opportunity)
@@ -1250,12 +1222,9 @@ async function fetchMarkets(chainId = 1, forceRefresh = false) {
         let response = null;
         let data = null;
 
-        // Try direct API first with timeout
+        // Try direct API first
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-            response = await fetch(apiUrl, { signal: controller.signal });
-            clearTimeout(timeoutId);
+            response = await fetch(apiUrl);
             if (response.ok) {
                 data = await response.json();
             }
@@ -2683,26 +2652,9 @@ async function loadHistoricalData(market) {
     // Show the card and loading state
     historyCard.style.display = 'block';
     historyLoading.style.display = 'block';
-    historyLoading.textContent = 'Loading historical data...';
     historyContent.style.display = 'none';
 
-    // Reset analytics to loading state
-    const meanRevEl = document.getElementById('mean-reversion-analysis');
-    const sharpeEl = document.getElementById('sharpe-analysis');
-    if (meanRevEl) meanRevEl.innerHTML = '<div class="analysis-detail">Loading...</div>';
-    if (sharpeEl) sharpeEl.innerHTML = '<div class="analysis-detail">Loading...</div>';
-
-    // Fetch with overall timeout
-    let history;
-    try {
-        history = await Promise.race([
-            fetchHarmonizedHistoricalData(market, chainId),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000))
-        ]);
-    } catch (e) {
-        console.log('Historical data fetch timed out or failed');
-        history = null;
-    }
+    const history = await fetchHarmonizedHistoricalData(market, chainId);
 
     if (!history) {
         historyLoading.textContent = 'Historical data not available for this market';
@@ -2780,27 +2732,21 @@ async function loadHistoricalData(market) {
 
     // 1. Mean Reversion Analysis
     const meanReversionEl = document.getElementById('mean-reversion-analysis');
-    if (meanReversionEl) {
-        if (underlyingStats) {
-            const meanReversion = getMeanReversionSignal(market.underlyingApyPercent, underlyingStats.avg, underlyingStats.stdDev);
-            if (meanReversion) {
-                meanReversionEl.innerHTML = `
-                    <div class="analysis-signal" style="color: ${meanReversion.color}">
-                        <span class="signal-icon">${meanReversion.zScore > 0 ? '📈' : meanReversion.zScore < 0 ? '📉' : '➡️'}</span>
-                        <span class="signal-text">${meanReversion.signal}</span>
-                    </div>
-                    <div class="analysis-detail">${meanReversion.description}</div>
-                    <div class="analysis-stats">
-                        <span>Historical Avg: ${formatPercent(underlyingStats.avg)}</span>
-                        <span>Volatility (σ): ${formatPercent(underlyingStats.stdDev)}</span>
-                        <span>Z-Score: ${meanReversion.zScore.toFixed(2)}</span>
-                    </div>
-                `;
-            } else {
-                meanReversionEl.innerHTML = `<div class="analysis-detail" style="color: var(--text-muted);">Insufficient data for analysis</div>`;
-            }
-        } else {
-            meanReversionEl.innerHTML = `<div class="analysis-detail" style="color: var(--text-muted);">Historical data unavailable</div>`;
+    if (meanReversionEl && underlyingStats) {
+        const meanReversion = getMeanReversionSignal(market.underlyingApyPercent, underlyingStats.avg, underlyingStats.stdDev);
+        if (meanReversion) {
+            meanReversionEl.innerHTML = `
+                <div class="analysis-signal" style="color: ${meanReversion.color}">
+                    <span class="signal-icon">${meanReversion.zScore > 0 ? '📈' : meanReversion.zScore < 0 ? '📉' : '➡️'}</span>
+                    <span class="signal-text">${meanReversion.signal}</span>
+                </div>
+                <div class="analysis-detail">${meanReversion.description}</div>
+                <div class="analysis-stats">
+                    <span>Historical Avg: ${formatPercent(underlyingStats.avg)}</span>
+                    <span>Volatility (σ): ${formatPercent(underlyingStats.stdDev)}</span>
+                    <span>Z-Score: ${meanReversion.zScore.toFixed(2)}</span>
+                </div>
+            `;
         }
     }
 
@@ -2831,42 +2777,38 @@ async function loadHistoricalData(market) {
 
     // 3. Sharpe Ratio Analysis
     const sharpeEl = document.getElementById('sharpe-analysis');
-    if (sharpeEl) {
-        if (underlyingStats && underlyingStats.stdDev > 0) {
-            const ptFixedApy = calculateFixedAPY(market.ptPrice, market.days);
-            const sharpeData = calculateSharpeRatios(
-                ptFixedApy,
-                market.underlyingApyPercent,
-                market.impliedApyPercent,
-                underlyingStats.stdDev,
-                market.days
-            );
+    if (sharpeEl && underlyingStats) {
+        const ptFixedApy = calculateFixedAPY(market.ptPrice, market.days);
+        const sharpeData = calculateSharpeRatios(
+            ptFixedApy,
+            market.underlyingApyPercent,
+            market.impliedApyPercent,
+            underlyingStats.stdDev,
+            market.days
+        );
 
-            const betterStrategy = sharpeData.pt.sharpe > sharpeData.yt.sharpe ? 'PT' : 'YT';
-            const betterColor = betterStrategy === 'PT' ? 'var(--pt-color)' : 'var(--yt-color)';
+        const betterStrategy = sharpeData.pt.sharpe > sharpeData.yt.sharpe ? 'PT' : 'YT';
+        const betterColor = betterStrategy === 'PT' ? 'var(--pt-color)' : 'var(--yt-color)';
 
-            sharpeEl.innerHTML = `
-                <div class="analysis-signal" style="color: ${betterColor}">
-                    <span class="signal-icon">📊</span>
-                    <span class="signal-text">${betterStrategy} has better risk-adjusted return</span>
+        sharpeEl.innerHTML = `
+            <div class="analysis-signal" style="color: ${betterColor}">
+                <span class="signal-icon">📊</span>
+                <span class="signal-text">${betterStrategy} has better risk-adjusted return</span>
+            </div>
+            <div class="sharpe-comparison">
+                <div class="sharpe-card ${betterStrategy === 'PT' ? 'highlighted' : ''}">
+                    <div class="sharpe-label">PT Sharpe</div>
+                    <div class="sharpe-value">${sharpeData.pt.sharpe.toFixed(2)}</div>
+                    <div class="sharpe-detail">Vol: ${formatPercent(sharpeData.pt.volatility)}</div>
                 </div>
-                <div class="sharpe-comparison">
-                    <div class="sharpe-card ${betterStrategy === 'PT' ? 'highlighted' : ''}">
-                        <div class="sharpe-label">PT Sharpe</div>
-                        <div class="sharpe-value">${sharpeData.pt.sharpe.toFixed(2)}</div>
-                        <div class="sharpe-detail">Vol: ${formatPercent(sharpeData.pt.volatility)}</div>
-                    </div>
-                    <div class="sharpe-card ${betterStrategy === 'YT' ? 'highlighted' : ''}">
-                        <div class="sharpe-label">YT Sharpe</div>
-                        <div class="sharpe-value">${sharpeData.yt.sharpe.toFixed(2)}</div>
-                        <div class="sharpe-detail">Vol: ${formatPercent(sharpeData.yt.volatility)}</div>
-                    </div>
+                <div class="sharpe-card ${betterStrategy === 'YT' ? 'highlighted' : ''}">
+                    <div class="sharpe-label">YT Sharpe</div>
+                    <div class="sharpe-value">${sharpeData.yt.sharpe.toFixed(2)}</div>
+                    <div class="sharpe-detail">Vol: ${formatPercent(sharpeData.yt.volatility)}</div>
                 </div>
-                <div class="analysis-detail">Higher Sharpe = better risk-adjusted return (assumes 3% risk-free rate)</div>
-            `;
-        } else {
-            sharpeEl.innerHTML = `<div class="analysis-detail" style="color: var(--text-muted);">Historical data unavailable</div>`;
-        }
+            </div>
+            <div class="analysis-detail">Higher Sharpe = better risk-adjusted return (assumes 3% risk-free rate)</div>
+        `;
     }
 
     // 4. Watermark History Analysis
