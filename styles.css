@@ -741,6 +741,21 @@ body {
     letter-spacing: 0.3px;
 }
 
+.signal-badge.clickable {
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.signal-badge.clickable:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    filter: brightness(1.15);
+}
+
+.signal-badge.clickable:active {
+    transform: scale(0.98);
+}
+
 .signal-badge.pt {
     background: rgba(45, 212, 191, 0.1);
     color: var(--pt-color);

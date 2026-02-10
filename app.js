@@ -1739,18 +1739,18 @@ function renderMarkets() {
             </div>
             <div class="market-signal">
                 ${market.watermarkStatus?.belowWatermark
-                    ? `<span class="signal-badge watermark" title="Exchange rate: ${market.watermarkStatus.ratio.toFixed(4)}x of watermark">⚠️ Below Watermark</span>`
+                    ? `<span class="signal-badge watermark clickable" data-signal-type="pt" title="Exchange rate: ${market.watermarkStatus.ratio.toFixed(4)}x of watermark. Click to analyze.">⚠️ Below Watermark</span>`
                     : market.loopOpportunity
-                        ? `<span class="signal-badge loop" title="${loopTooltip}">🔄 Loop +${formatPercent(market.loopOpportunity.apyBoost)}</span>`
+                        ? `<span class="signal-badge loop clickable" data-signal-type="loop" title="${loopTooltip}. Click to analyze loop strategy.">🔄 Loop +${formatPercent(market.loopOpportunity.apyBoost)}</span>`
                         : market.lpApy > market.underlyingApyPercent && market.lpApy > calculateFixedAPY(market.ptPrice, market.days)
-                            ? `<span class="signal-badge lp" title="LP APY beats both underlying and fixed APY">LP Best</span>`
-                            : `<span class="signal-badge ${market.signal.type}">${market.signal.label}</span>`
+                            ? `<span class="signal-badge lp clickable" data-signal-type="lp" title="LP APY beats both underlying and fixed APY. Click to analyze.">LP Best</span>`
+                            : `<span class="signal-badge ${market.signal.type} clickable" data-signal-type="${market.signal.type}" title="${market.signal.label}. Click to analyze.">${market.signal.label}</span>`
                 }
             </div>
         </div>
     `}).join('');
 
-    // Add click handlers
+    // Add click handlers for market cards
     container.querySelectorAll('.market-card').forEach(card => {
         card.addEventListener('click', () => {
             const address = card.dataset.address;
@@ -1759,6 +1759,39 @@ function renderMarkets() {
                 const chainId = document.getElementById('chain-filter')?.value || 1;
                 populateCalculatorFromMarket(selectedMarket, chainId);
                 switchTab('calculator');
+            }
+        });
+    });
+
+    // Add click handlers for signal badges - navigate to specific position type
+    container.querySelectorAll('.signal-badge.clickable').forEach(badge => {
+        badge.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent card click from firing
+
+            const card = badge.closest('.market-card');
+            const address = card?.dataset.address;
+            const signalType = badge.dataset.signalType;
+
+            selectedMarket = markets.find(m => m.address === address);
+            if (selectedMarket) {
+                const chainId = document.getElementById('chain-filter')?.value || 1;
+                populateCalculatorFromMarket(selectedMarket, chainId);
+
+                // Set the position type based on the signal
+                let targetType = 'pt'; // default
+                if (signalType === 'yt') targetType = 'yt';
+                else if (signalType === 'lp') targetType = 'lp';
+                else if (signalType === 'loop') targetType = 'loop';
+                else if (signalType === 'pt' || signalType === 'neutral' || signalType === 'watermark') targetType = 'pt';
+
+                // Update position type toggle
+                positionType = targetType;
+                document.querySelectorAll('.toggle-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.type === targetType);
+                });
+
+                switchTab('calculator');
+                updateCalculator();
             }
         });
     });
