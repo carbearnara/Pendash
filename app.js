@@ -85,6 +85,9 @@ const KNOWN_WATERMARK_EVENTS = [
 // Cache for historical data
 const historyCache = new Map();
 
+// Cache for harmonized historical data (merged across maturities)
+const harmonizedHistoryCache = new Map();
+
 // Cache for protocol verification data
 const protocolApyCache = new Map();
 
@@ -798,6 +801,151 @@ async function fetchHistoricalData(marketAddress, chainId = 1) {
     } catch (e) {
         console.error('Failed to fetch historical data:', e);
         return null;
+    }
+}
+
+// Find all markets with the same underlying asset (same SY token)
+function findRelatedMarkets(market, chainId) {
+    if (!market?.sy?.address) return [market];
+
+    const syAddress = market.sy.address.toLowerCase();
+    const related = markets.filter(m =>
+        m.sy?.address?.toLowerCase() === syAddress
+    );
+
+    // Sort by expiry date (oldest first) to get chronological data
+    related.sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+
+    return related.length > 0 ? related : [market];
+}
+
+// Fetch harmonized historical data across all maturities for same underlying
+async function fetchHarmonizedHistoricalData(market, chainId = 1) {
+    const syAddress = market?.sy?.address?.toLowerCase();
+    if (!syAddress) {
+        // Fallback to regular fetch if no SY address
+        return fetchHistoricalData(market.address, chainId);
+    }
+
+    const cacheKey = `harmonized-${chainId}-${syAddress}`;
+    if (harmonizedHistoryCache.has(cacheKey)) {
+        const cached = harmonizedHistoryCache.get(cacheKey);
+        // Add current market's implied APY data
+        return {
+            ...cached,
+            currentMarketAddress: market.address
+        };
+    }
+
+    try {
+        // Find all markets with same underlying
+        const relatedMarkets = findRelatedMarkets(market, chainId);
+        console.log(`Found ${relatedMarkets.length} related markets for ${market.pt?.proName || market.name}`);
+
+        // Fetch historical data from all related markets in parallel
+        const historyPromises = relatedMarkets.map(m =>
+            fetchHistoricalData(m.address, chainId).catch(() => null)
+        );
+        const histories = await Promise.all(historyPromises);
+
+        // Merge underlying APY data by date (deduplicate)
+        const underlyingByDate = new Map();
+        const impliedByDate = new Map(); // Only for current market
+
+        histories.forEach((history, idx) => {
+            if (!history?.rawData) return;
+
+            history.rawData.forEach(dataPoint => {
+                const dateKey = dataPoint.timestamp?.split('T')[0]; // Use date only
+                if (!dateKey) return;
+
+                // Always merge underlying APY (same across maturities)
+                if (dataPoint.underlyingApy !== undefined && dataPoint.underlyingApy !== null) {
+                    // Keep the most recent value for each date (in case of duplicates)
+                    if (!underlyingByDate.has(dateKey) ||
+                        new Date(dataPoint.timestamp) > new Date(underlyingByDate.get(dateKey).timestamp)) {
+                        underlyingByDate.set(dateKey, {
+                            timestamp: dataPoint.timestamp,
+                            underlyingApy: dataPoint.underlyingApy
+                        });
+                    }
+                }
+
+                // Only use implied APY from current market (it's maturity-specific)
+                if (relatedMarkets[idx].address === market.address &&
+                    dataPoint.impliedApy !== undefined && dataPoint.impliedApy !== null) {
+                    impliedByDate.set(dateKey, {
+                        timestamp: dataPoint.timestamp,
+                        impliedApy: dataPoint.impliedApy
+                    });
+                }
+            });
+        });
+
+        // Convert maps to sorted arrays
+        const sortedDates = Array.from(underlyingByDate.keys()).sort();
+        const mergedRawData = sortedDates.map(date => ({
+            timestamp: underlyingByDate.get(date)?.timestamp || date,
+            underlyingApy: underlyingByDate.get(date)?.underlyingApy,
+            impliedApy: impliedByDate.get(date)?.impliedApy
+        }));
+
+        // Calculate statistics
+        const calcStats = (arr, field) => {
+            const values = arr.map(d => (d[field] || 0) * 100).filter(v => v > 0 && v < 1000);
+            if (values.length === 0) return null;
+            const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
+            const stdDev = Math.sqrt(variance);
+            return {
+                min: Math.min(...values),
+                max: Math.max(...values),
+                avg,
+                stdDev,
+                current: values[values.length - 1],
+                values: values
+            };
+        };
+
+        // Get time slices
+        const last90Days = mergedRawData.slice(-90);
+        const last30Days = mergedRawData.slice(-30);
+        const last7Days = mergedRawData.slice(-7);
+
+        const harmonizedHistory = {
+            underlyingApy: {
+                all: calcStats(mergedRawData, 'underlyingApy'),
+                last90d: calcStats(last90Days, 'underlyingApy'),
+                last30d: calcStats(last30Days, 'underlyingApy'),
+                last7d: calcStats(last7Days, 'underlyingApy'),
+            },
+            impliedApy: {
+                all: calcStats(mergedRawData, 'impliedApy'),
+                last90d: calcStats(last90Days, 'impliedApy'),
+                last30d: calcStats(last30Days, 'impliedApy'),
+                last7d: calcStats(last7Days, 'impliedApy'),
+            },
+            dataPoints: mergedRawData.length,
+            marketsUsed: relatedMarkets.length,
+            startDate: mergedRawData[0]?.timestamp,
+            endDate: mergedRawData[mergedRawData.length - 1]?.timestamp,
+            rawData: mergedRawData.slice(-180), // Keep last 180 days for extended charting
+            chainId: chainId,
+            isHarmonized: true,
+            relatedMarkets: relatedMarkets.map(m => ({
+                name: m.pt?.proName || m.name,
+                expiry: m.expiry,
+                address: m.address
+            }))
+        };
+
+        harmonizedHistoryCache.set(cacheKey, harmonizedHistory);
+        return harmonizedHistory;
+
+    } catch (e) {
+        console.error('Failed to fetch harmonized historical data:', e);
+        // Fallback to regular fetch
+        return fetchHistoricalData(market.address, chainId);
     }
 }
 
@@ -1937,7 +2085,7 @@ async function fetchAndRenderOraclePriceChart() {
 
     try {
         const chainId = parseInt(document.getElementById('chain-filter')?.value) || 1;
-        const history = await fetchHistoricalData(selectedMarket.address, chainId);
+        const history = await fetchHarmonizedHistoricalData(selectedMarket, chainId);
 
         if (!history || !history.rawData || history.rawData.length === 0) {
             if (chartLoading) chartLoading.textContent = 'No historical data available';
@@ -2456,7 +2604,7 @@ async function loadHistoricalData(market) {
     historyLoading.style.display = 'block';
     historyContent.style.display = 'none';
 
-    const history = await fetchHistoricalData(market.address, chainId);
+    const history = await fetchHarmonizedHistoricalData(market, chainId);
 
     if (!history) {
         historyLoading.textContent = 'Historical data not available for this market';
@@ -2465,6 +2613,22 @@ async function loadHistoricalData(market) {
 
     historyLoading.style.display = 'none';
     historyContent.style.display = 'block';
+
+    // Update history card title with harmonized data info
+    const historyTitle = document.getElementById('history-title');
+    const historySubtitle = document.getElementById('history-subtitle');
+    if (historyTitle) {
+        const days = history.dataPoints || 90;
+        historyTitle.textContent = `Historical Yield Range (${days} Days)`;
+    }
+    if (historySubtitle) {
+        if (history.isHarmonized && history.marketsUsed > 1) {
+            historySubtitle.textContent = `Underlying APY data merged from ${history.marketsUsed} maturities for extended history`;
+            historySubtitle.style.display = 'block';
+        } else {
+            historySubtitle.style.display = 'none';
+        }
+    }
 
     // Update implied APY range
     const impliedStats = history.impliedApy.last90d || history.impliedApy.all;
@@ -2779,7 +2943,7 @@ async function loadHistoricalData(market) {
     }
 
     // Render history chart
-    renderHistoryChart(history.rawData);
+    renderHistoryChart(history);
 }
 
 // Calculate moving average
@@ -2801,9 +2965,21 @@ function calculateMovingAverage(data, window = 7) {
 }
 
 // Render the historical yield chart
-function renderHistoryChart(data) {
+function renderHistoryChart(history) {
     const ctx = document.getElementById('history-chart');
+    const data = history?.rawData;
     if (!ctx || !data || data.length === 0) return;
+
+    // Update chart title based on data range
+    const chartTitle = document.getElementById('history-chart-title');
+    if (chartTitle) {
+        const days = data.length;
+        if (history.isHarmonized && history.marketsUsed > 1) {
+            chartTitle.textContent = `${days}-Day Yield History (${history.marketsUsed} maturities merged)`;
+        } else {
+            chartTitle.textContent = `${days}-Day Yield History`;
+        }
+    }
 
     const labels = data.map(d => {
         const date = new Date(d.timestamp);

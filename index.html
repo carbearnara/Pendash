@@ -530,7 +530,8 @@
 
                 <!-- Historical Yield Range -->
                 <div class="history-card" id="history-card" style="display: none;">
-                    <h3>Historical Yield Range (90 Days)</h3>
+                    <h3 id="history-title">Historical Yield Range</h3>
+                    <p class="history-subtitle" id="history-subtitle"></p>
                     <div class="history-loading" id="history-loading">Loading historical data...</div>
                     <div class="history-content" id="history-content" style="display: none;">
                         <div class="yield-range-section">
@@ -580,7 +581,7 @@
                         </div>
 
                         <div class="history-chart-container">
-                            <h4>90-Day Yield History</h4>
+                            <h4 id="history-chart-title">Yield History</h4>
                             <canvas id="history-chart"></canvas>
                         </div>
 
