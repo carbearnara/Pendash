@@ -648,31 +648,46 @@ async function fetchHistoricalData(marketAddress, chainId = 1) {
     }
 
     try {
-        const apiUrl = `${API_BASE}/v2/${chainId}/markets/${marketAddress}/historical-data?time_frame=day`;
-        let response = null;
         let data = null;
 
-        // Try direct API first
+        // Try our own API first (uses Vercel KV cache)
         try {
-            response = await fetch(apiUrl);
+            const ownApiUrl = `/api/history?chainId=${chainId}&address=${marketAddress}`;
+            const response = await fetch(ownApiUrl);
             if (response.ok) {
                 data = await response.json();
+                if (data?.results) {
+                    console.log(`History from KV cache: ${data.dataPoints} points, cached: ${data.cached}`);
+                }
             }
         } catch (e) {
-            console.log('Direct historical API failed, trying proxy...');
+            console.log('Own API failed, trying Pendle directly...');
         }
 
-        // Try CORS proxy if direct failed
-        if (!data) {
-            for (const proxyFn of CORS_PROXIES) {
-                try {
-                    response = await fetch(proxyFn(apiUrl));
-                    if (response.ok) {
-                        data = await response.json();
-                        if (data?.results) break;
+        // Fallback to Pendle API directly
+        if (!data?.results) {
+            const pendleUrl = `${API_BASE}/v2/${chainId}/markets/${marketAddress}/historical-data?time_frame=day`;
+            try {
+                const response = await fetch(pendleUrl);
+                if (response.ok) {
+                    data = await response.json();
+                }
+            } catch (e) {
+                console.log('Direct Pendle API failed, trying proxy...');
+            }
+
+            // Try CORS proxy if direct failed
+            if (!data?.results) {
+                for (const proxyFn of CORS_PROXIES) {
+                    try {
+                        const response = await fetch(proxyFn(pendleUrl));
+                        if (response.ok) {
+                            data = await response.json();
+                            if (data?.results) break;
+                        }
+                    } catch (e) {
+                        continue;
                     }
-                } catch (e) {
-                    continue;
                 }
             }
         }

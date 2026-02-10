@@ -1,0 +1,11 @@
+{
+  "name": "pendash",
+  "version": "1.0.0",
+  "description": "Pendle Yield Analysis Dashboard",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@vercel/kv": "^2.0.0"
+  }
+}
