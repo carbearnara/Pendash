@@ -222,7 +222,7 @@
                         <h3>Position Parameters</h3>
 
                         <div class="input-group">
-                            <label for="calc-position-type">Position Type <span class="help-trigger" data-tooltip="position-types">?</span></label>
+                            <label for="calc-position-type">Position Type</label>
                             <div class="toggle-group">
                                 <button class="toggle-btn active" data-type="pt">Buy PT</button>
                                 <button class="toggle-btn" data-type="yt">Buy YT</button>
@@ -356,7 +356,7 @@
 
                         <div id="lp-results" style="display: none;">
                             <div class="result-item">
-                                <span class="result-label">LP APY (Total) <span class="help-trigger" data-tooltip="lp-apy">?</span></span>
+                                <span class="result-label">LP APY (Total)</span>
                                 <span class="result-value" id="calc-lp-apy">15.50%</span>
                             </div>
                             <div class="result-item">
@@ -592,8 +592,7 @@
                                 <div class="analytics-card">
                                     <div class="analytics-header">
                                         <span class="analytics-title">Mean Reversion</span>
-                                        <span class="analytics-tooltip" title="Yields tend to revert to their historical average. Extreme deviations often signal opportunities.">ℹ️</span>
-                                    </div>
+                                                                            </div>
                                     <div class="analytics-body" id="mean-reversion-analysis">
                                         <div class="analysis-detail">Calculating...</div>
                                     </div>
@@ -602,8 +601,7 @@
                                 <div class="analytics-card">
                                     <div class="analytics-header">
                                         <span class="analytics-title">Cross-Asset Comparison</span>
-                                        <span class="analytics-tooltip" title="Compare implied APY with similar assets to find relative mispricing.">ℹ️</span>
-                                    </div>
+                                                                            </div>
                                     <div class="analytics-body" id="cross-asset-analysis">
                                         <div class="analysis-detail">Calculating...</div>
                                     </div>
@@ -612,8 +610,7 @@
                                 <div class="analytics-card">
                                     <div class="analytics-header">
                                         <span class="analytics-title">Risk-Adjusted Returns (Sharpe)</span>
-                                        <span class="analytics-tooltip" title="Sharpe ratio measures return per unit of risk. Higher is better.">ℹ️</span>
-                                    </div>
+                                                                            </div>
                                     <div class="analytics-body" id="sharpe-analysis">
                                         <div class="analysis-detail">Calculating...</div>
                                     </div>
@@ -622,8 +619,7 @@
                                 <div class="analytics-card">
                                     <div class="analytics-header">
                                         <span class="analytics-title">ETH Price Correlation</span>
-                                        <span class="analytics-tooltip" title="How correlated is this yield with ETH price? High correlation means yield may drop in bear markets.">ℹ️</span>
-                                    </div>
+                                                                            </div>
                                     <div class="analytics-body" id="correlation-analysis">
                                         <div class="analysis-detail">Calculating...</div>
                                     </div>
@@ -632,8 +628,7 @@
                                 <div class="analytics-card verification-card">
                                     <div class="analytics-header">
                                         <span class="analytics-title">🔍 On-Chain Verification</span>
-                                        <span class="analytics-tooltip" title="Cross-references Pendle's underlying APY with official protocol data sources (Lido, EtherFi, Rocket Pool, etc.)">ℹ️</span>
-                                    </div>
+                                                                            </div>
                                     <div class="analytics-body" id="verification-analysis">
                                         <div class="analysis-detail">Select a market to verify...</div>
                                     </div>
@@ -642,8 +637,7 @@
                                 <div class="analytics-card watermark-card">
                                     <div class="analytics-header">
                                         <span class="analytics-title">💧 Watermark History</span>
-                                        <span class="analytics-tooltip" title="Analyzes historical yield data for potential watermark breaches. When exchange rate falls below the watermark (pyIndexStored), YT stops earning yield.">ℹ️</span>
-                                    </div>
+                                                                            </div>
                                     <div class="analytics-body" id="watermark-history-analysis">
                                         <div class="analysis-detail">Select a market to analyze...</div>
                                     </div>
@@ -923,58 +917,6 @@
             <p class="disclaimer">Calculations are estimates. Not financial advice. DYOR.</p>
         </footer>
     </div>
-
-    <!-- Tooltip Container -->
-    <div class="tooltip-overlay" id="tooltip-overlay">
-        <div class="tooltip-content" id="tooltip-content"></div>
-    </div>
-
-    <!-- Tooltip Templates -->
-    <template id="tooltip-position-types">
-        <h4>Position Types</h4>
-        <div class="tooltip-section">
-            <strong style="color: var(--pt-color);">PT (Principal Token)</strong>
-            <p>Buy the underlying asset at a discount. At maturity, 1 PT = 1 underlying. Your profit is the discount you bought at, giving you a fixed APY.</p>
-        </div>
-        <div class="tooltip-section">
-            <strong style="color: var(--yt-color);">YT (Yield Token)</strong>
-            <p>Receive ALL yield generated by the underlying until maturity. High leverage on yield - if APY stays above break-even, you profit. If it drops, you may lose money.</p>
-        </div>
-        <div class="tooltip-section">
-            <strong style="color: var(--lp-color);">LP (Liquidity Provider)</strong>
-            <p>Deposit into PT/SY pools to earn swap fees plus incentives. You're exposed to both PT price and underlying yield. Lower risk than YT, often with bonus rewards.</p>
-        </div>
-        <div class="tooltip-section">
-            <strong style="color: var(--loop-color);">Loop PT (Leveraged PT)</strong>
-            <p>Use PT as collateral on Aave/Morpho to borrow stablecoins, then buy more PT. Amplifies your fixed APY through leverage. Higher risk due to liquidation potential.</p>
-        </div>
-    </template>
-
-    <template id="tooltip-lp-apy">
-        <h4>LP APY Breakdown</h4>
-        <p>Total LP APY comes from multiple sources:</p>
-        <ul>
-            <li><strong>Swap Fees:</strong> Earned from traders swapping PT ↔ SY</li>
-            <li><strong>PT Yield:</strong> Your PT portion earns its fixed yield</li>
-            <li><strong>Incentives:</strong> PENDLE emissions, partner rewards, points</li>
-        </ul>
-        <p class="tooltip-note">Note: LP position has some exposure to PT price changes (similar to impermanent loss).</p>
-    </template>
-
-    <template id="tooltip-loop-strategy">
-        <h4>PT Looping Strategy</h4>
-        <p>A leveraged yield strategy using PT as collateral:</p>
-        <ul>
-            <li><strong>1. Buy PT:</strong> Purchase PT at a discount to lock in fixed APY</li>
-            <li><strong>2. Deposit as Collateral:</strong> Deposit PT on Aave V3 or Morpho Blue</li>
-            <li><strong>3. Borrow Stablecoins:</strong> Borrow USDC/USDT against your PT</li>
-            <li><strong>4. Buy More PT:</strong> Use borrowed funds to buy more PT</li>
-            <li><strong>5. Repeat:</strong> Loop for additional leverage</li>
-        </ul>
-        <p><strong>Effective APY Formula:</strong><br>
-        (PT Fixed APY × Leverage) - (Borrow Rate × (Leverage - 1))</p>
-        <p class="tooltip-note">⚠️ Warning: Liquidation risk if PT price drops significantly. Monitor your position and maintain safe leverage.</p>
-    </template>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>

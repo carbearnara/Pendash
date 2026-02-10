@@ -3347,48 +3347,6 @@ function initEventListeners() {
         });
     });
 
-    // Tooltips
-    document.querySelectorAll('.help-trigger').forEach(trigger => {
-        trigger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const tooltipId = trigger.dataset.tooltip;
-            showTooltip(tooltipId);
-        });
-    });
-
-    // Close tooltip on overlay click
-    document.getElementById('tooltip-overlay')?.addEventListener('click', (e) => {
-        if (e.target.id === 'tooltip-overlay') {
-            hideTooltip();
-        }
-    });
-
-    // Close tooltip on Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            hideTooltip();
-        }
-    });
-}
-
-// Show tooltip
-function showTooltip(tooltipId) {
-    const template = document.getElementById(`tooltip-${tooltipId}`);
-    const overlay = document.getElementById('tooltip-overlay');
-    const content = document.getElementById('tooltip-content');
-
-    if (template && overlay && content) {
-        content.innerHTML = template.innerHTML;
-        overlay.classList.add('active');
-    }
-}
-
-// Hide tooltip
-function hideTooltip() {
-    const overlay = document.getElementById('tooltip-overlay');
-    if (overlay) {
-        overlay.classList.remove('active');
-    }
 }
 
 // Update sort header UI to match current sort state
