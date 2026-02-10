@@ -17,10 +17,10 @@ const RPC_ENDPOINTS = {
     56: 'https://bsc-dataseed.binance.org',
     146: 'https://rpc.soniclabs.com',
     999: 'https://rpc.hyperliquid.xyz/evm',
-    9745: 'https://rpc.berachain.com',
+    9745: 'https://rpc.plasma.to',
     5000: 'https://rpc.mantle.xyz',
     10: 'https://mainnet.optimism.io',
-    43114: 'https://api.avax.network/ext/bc/C/rpc',
+    80094: 'https://rpc.berachain.com',
 };
 
 // Minimal ABIs for watermark checking
@@ -1537,10 +1537,10 @@ function getPendleChainName(chainId) {
         56: 'bsc',
         146: 'sonic',
         999: 'hyperevm',
-        9745: 'berachain',
+        9745: 'plasma',
         5000: 'mantle',
         10: 'optimism',
-        43114: 'avalanche'
+        80094: 'berachain'
     };
     return chainNames[chainId] || 'ethereum';
 }
