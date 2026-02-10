@@ -1123,32 +1123,56 @@ async function checkWatermarkStatus(ytAddress, chainId) {
     }
 }
 
-// Check watermarks for all markets (in background)
+// Check watermarks for all markets (in background, parallel batches)
 async function checkAllWatermarks(marketsToCheck) {
     const chainId = document.getElementById('chain-filter')?.value || 1;
+    const BATCH_SIZE = 5; // Check 5 markets at a time
 
-    for (const market of marketsToCheck) {
-        // Extract YT address from the market data
-        // The yt field is formatted as "chainId-address"
+    // Prepare market addresses
+    const marketsWithYt = marketsToCheck.map(market => {
         let ytAddress = market.yt;
         if (typeof ytAddress === 'string' && ytAddress.includes('-')) {
             ytAddress = ytAddress.split('-')[1];
         }
+        return { market, ytAddress };
+    }).filter(m => m.ytAddress && m.ytAddress.startsWith('0x'));
 
-        if (ytAddress && ytAddress.startsWith('0x')) {
-            const status = await checkWatermarkStatus(ytAddress, parseInt(chainId));
+    // Process in batches
+    for (let i = 0; i < marketsWithYt.length; i += BATCH_SIZE) {
+        const batch = marketsWithYt.slice(i, i + BATCH_SIZE);
+
+        // Check batch in parallel with timeout
+        const results = await Promise.all(
+            batch.map(async ({ market, ytAddress }) => {
+                try {
+                    const status = await Promise.race([
+                        checkWatermarkStatus(ytAddress, parseInt(chainId)),
+                        new Promise(resolve => setTimeout(() => resolve(null), 3000)) // 3s timeout per check
+                    ]);
+                    return { market, status };
+                } catch {
+                    return { market, status: null };
+                }
+            })
+        );
+
+        // Update markets with results
+        let foundBelow = false;
+        for (const { market, status } of results) {
             if (status) {
                 market.watermarkStatus = status;
-                // Re-render if below watermark
                 if (status.belowWatermark) {
                     console.log(`${market.name} is BELOW watermark! Ratio: ${status.ratio.toFixed(4)}`);
+                    foundBelow = true;
                 }
             }
         }
-    }
 
-    // Re-render markets with watermark info
-    renderMarkets();
+        // Only re-render if we found something important
+        if (foundBelow) {
+            renderMarkets();
+        }
+    }
 }
 
 // Determine market signal (PT opportunity vs YT opportunity)
@@ -1226,9 +1250,12 @@ async function fetchMarkets(chainId = 1, forceRefresh = false) {
         let response = null;
         let data = null;
 
-        // Try direct API first
+        // Try direct API first with timeout
         try {
-            response = await fetch(apiUrl);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+            response = await fetch(apiUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
             if (response.ok) {
                 data = await response.json();
             }
