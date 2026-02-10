@@ -18,6 +18,9 @@ const RPC_ENDPOINTS = {
     146: 'https://rpc.soniclabs.com',
     999: 'https://rpc.hyperliquid.xyz/evm',
     9745: 'https://rpc.berachain.com',
+    5000: 'https://rpc.mantle.xyz',
+    10: 'https://mainnet.optimism.io',
+    43114: 'https://api.avax.network/ext/bc/C/rpc',
 };
 
 // Minimal ABIs for watermark checking
@@ -656,7 +659,7 @@ let selectedMarket = null;
 let comparisonChart = null;
 let legendFilters = { pt: true, yt: true, lp: true, loop: true, neutral: true, watermark: true };
 let sortDirection = 'desc'; // 'desc' or 'asc'
-let currentSortColumn = 'tvl';
+let currentSortColumn = 'underlyingApy';
 
 // Utility functions
 function formatNumber(num, decimals = 2) {
@@ -1534,7 +1537,10 @@ function getPendleChainName(chainId) {
         56: 'bsc',
         146: 'sonic',
         999: 'hyperevm',
-        9745: 'berachain'
+        9745: 'berachain',
+        5000: 'mantle',
+        10: 'optimism',
+        43114: 'avalanche'
     };
     return chainNames[chainId] || 'ethereum';
 }
