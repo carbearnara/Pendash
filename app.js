@@ -1,30 +1,12 @@
-// Pendash - Pendle Calculator with Live Market Data
+// Pendash - Pendle Yield Analysis with Live Market Data
 
 const PENDLE_FEE = 0.05; // 5% fee on YT yield
 const API_BASE = 'https://api-v2.pendle.finance/core';
 
-// Aave V3 GraphQL Subgraph endpoints by chain
-const AAVE_SUBGRAPHS = {
-    1: 'https://api.thegraph.com/subgraphs/name/aave/protocol-v3',
-    42161: 'https://api.thegraph.com/subgraphs/name/aave/protocol-v3-arbitrum',
-};
-
-// Morpho Blue API endpoint
-const MORPHO_API = 'https://blue-api.morpho.org/graphql';
-
-// Cache for lending markets data (5 minute TTL)
-const lendingMarketsCache = {
-    aave: new Map(),
-    morpho: new Map(),
-    lastFetch: 0,
-    TTL: 5 * 60 * 1000 // 5 minutes
-};
-
-// Multiple CORS proxy options to try
+// CORS proxy for API fallback (used for historical data and protocol verification)
 const CORS_PROXIES = [
     (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    (url) => `https://cors-anywhere.herokuapp.com/${url}`,
 ];
 
 // RPC endpoints for different chains
@@ -210,192 +192,6 @@ async function fetchProtocolApy(source) {
 }
 
 // Fetch Aave V3 reserves data for a chain
-async function fetchAaveReserves(chainId) {
-    const cacheKey = `aave-${chainId}`;
-    const now = Date.now();
-
-    // Check cache
-    if (lendingMarketsCache.aave.has(cacheKey)) {
-        const cached = lendingMarketsCache.aave.get(cacheKey);
-        if (now - cached.timestamp < lendingMarketsCache.TTL) {
-            return cached.data;
-        }
-    }
-
-    const subgraphUrl = AAVE_SUBGRAPHS[chainId];
-    if (!subgraphUrl) return [];
-
-    const query = `{
-        reserves(first: 100, where: {isActive: true}) {
-            id
-            symbol
-            name
-            underlyingAsset
-            usageAsCollateralEnabled
-            baseLTVasCollateral
-            reserveLiquidationThreshold
-            variableBorrowRate
-            stableBorrowRate
-            availableLiquidity
-            totalCurrentVariableDebt
-        }
-    }`;
-
-    try {
-        let response = null;
-        let data = null;
-
-        // Try direct fetch first
-        try {
-            response = await fetch(subgraphUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query })
-            });
-            if (response.ok) {
-                data = await response.json();
-            }
-        } catch (e) {
-            console.log(`Direct Aave fetch failed for chain ${chainId}, trying proxy...`);
-        }
-
-        // Try with CORS proxy
-        if (!data) {
-            for (const proxyFn of CORS_PROXIES) {
-                try {
-                    response = await fetch(proxyFn(subgraphUrl), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query })
-                    });
-                    if (response.ok) {
-                        data = await response.json();
-                        if (data?.data?.reserves) break;
-                    }
-                } catch (e) {
-                    continue;
-                }
-            }
-        }
-
-        if (data?.data?.reserves) {
-            const reserves = data.data.reserves.map(r => ({
-                symbol: r.symbol,
-                name: r.name,
-                underlyingAsset: r.underlyingAsset,
-                usageAsCollateralEnabled: r.usageAsCollateralEnabled,
-                ltv: parseFloat(r.baseLTVasCollateral) / 10000, // Convert from basis points
-                liquidationThreshold: parseFloat(r.reserveLiquidationThreshold) / 10000,
-                borrowRate: parseFloat(r.variableBorrowRate) / 1e27 * 100, // Convert from RAY to percentage
-                platform: 'Aave V3'
-            }));
-
-            lendingMarketsCache.aave.set(cacheKey, { data: reserves, timestamp: now });
-            return reserves;
-        }
-    } catch (e) {
-        console.error('Failed to fetch Aave reserves:', e);
-    }
-
-    return [];
-}
-
-// Fetch Morpho Blue markets data
-async function fetchMorphoMarkets(chainIds = [1]) {
-    const cacheKey = `morpho-${chainIds.join('-')}`;
-    const now = Date.now();
-
-    // Check cache
-    if (lendingMarketsCache.morpho.has(cacheKey)) {
-        const cached = lendingMarketsCache.morpho.get(cacheKey);
-        if (now - cached.timestamp < lendingMarketsCache.TTL) {
-            return cached.data;
-        }
-    }
-
-    const query = `{
-        markets(first: 100, where: {whitelisted: true}) {
-            id
-            uniqueKey
-            lltv
-            collateralAsset {
-                symbol
-                name
-                address
-            }
-            loanAsset {
-                symbol
-                name
-                address
-            }
-            state {
-                borrowApy
-                supplyApy
-                totalBorrowAssets
-                totalSupplyAssets
-            }
-        }
-    }`;
-
-    try {
-        let response = null;
-        let data = null;
-
-        // Try direct fetch first
-        try {
-            response = await fetch(MORPHO_API, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query })
-            });
-            if (response.ok) {
-                data = await response.json();
-            }
-        } catch (e) {
-            console.log('Direct Morpho fetch failed, trying proxy...');
-        }
-
-        // Try with CORS proxy
-        if (!data) {
-            for (const proxyFn of CORS_PROXIES) {
-                try {
-                    response = await fetch(proxyFn(MORPHO_API), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query })
-                    });
-                    if (response.ok) {
-                        data = await response.json();
-                        if (data?.data?.markets) break;
-                    }
-                } catch (e) {
-                    continue;
-                }
-            }
-        }
-
-        if (data?.data?.markets) {
-            const markets = data.data.markets.map(m => ({
-                id: m.uniqueKey,
-                collateralSymbol: m.collateralAsset?.symbol || '',
-                collateralName: m.collateralAsset?.name || '',
-                collateralAddress: m.collateralAsset?.address || '',
-                loanSymbol: m.loanAsset?.symbol || '',
-                ltv: parseFloat(m.lltv) / 1e18, // Convert from wei
-                borrowRate: (m.state?.borrowApy || 0) * 100, // Already a decimal
-                platform: 'Morpho Blue'
-            }));
-
-            lendingMarketsCache.morpho.set(cacheKey, { data: markets, timestamp: now });
-            return markets;
-        }
-    } catch (e) {
-        console.error('Failed to fetch Morpho markets:', e);
-    }
-
-    return [];
-}
-
 // Known PT-Lending pairs with real market data
 // These are VERIFIED PT (Pendle Principal Token) collateral integrations on lending protocols
 // Only includes markets where PT-<asset> is accepted as collateral, NOT the underlying asset
@@ -645,8 +441,8 @@ function calculateLoopMetrics(ptFixedApy, ltv, borrowRate) {
     };
 }
 
-// Find loop opportunity for a market
-function findLoopOpportunity(market, chainId, aaveReserves, morphoMarkets) {
+// Find loop opportunity for a market using verified PT lending pairs
+function findLoopOpportunity(market, chainId) {
     const marketName = (market.name || market.proName || '').toUpperCase();
 
     // Get PT fixed APY
@@ -655,7 +451,7 @@ function findLoopOpportunity(market, chainId, aaveReserves, morphoMarkets) {
     // Minimum PT APY threshold - need decent fixed yield for looping to make sense
     if (ptFixedApy < 3) return null;
 
-    // First check known pairs (most reliable)
+    // Check known verified PT lending pairs
     for (const [assetName, pairData] of Object.entries(KNOWN_PT_LENDING_PAIRS)) {
         if (marketName.includes(assetName.toUpperCase()) && pairData.chains.includes(chainId)) {
             const metrics = calculateLoopMetrics(ptFixedApy, pairData.ltv, pairData.borrowRate);
@@ -668,60 +464,6 @@ function findLoopOpportunity(market, chainId, aaveReserves, morphoMarkets) {
                     borrowSymbol: pairData.borrowAsset,
                     ...metrics,
                     isKnownPair: true
-                };
-            }
-        }
-    }
-
-    // Check Aave reserves for PT collateral (bonus if API works)
-    for (const reserve of aaveReserves) {
-        const reserveSymbol = (reserve.symbol || '').toUpperCase();
-
-        // Match PT symbol or underlying asset as collateral
-        if (reserve.usageAsCollateralEnabled &&
-            (reserveSymbol.includes(marketName) || reserveSymbol.includes('PT-' + marketName))) {
-
-            // Find stablecoin borrow rates (USDC, USDT)
-            const stablecoins = aaveReserves.filter(r =>
-                ['USDC', 'USDT', 'DAI'].includes(r.symbol?.toUpperCase())
-            );
-
-            if (stablecoins.length > 0) {
-                // Use lowest borrow rate
-                const bestStable = stablecoins.reduce((best, current) =>
-                    current.borrowRate < best.borrowRate ? current : best
-                );
-
-                const metrics = calculateLoopMetrics(ptFixedApy, reserve.ltv, bestStable.borrowRate);
-
-                // Only return if APY boost is meaningful (>= 1.5%)
-                if (metrics.apyBoost >= 1.5) {
-                    return {
-                        platform: reserve.platform,
-                        collateralSymbol: reserve.symbol,
-                        borrowSymbol: bestStable.symbol,
-                        ...metrics
-                    };
-                }
-            }
-        }
-    }
-
-    // Check Morpho markets for PT collateral (bonus if API works)
-    for (const morphoMarket of morphoMarkets) {
-        const collateralSymbol = (morphoMarket.collateralSymbol || '').toUpperCase();
-
-        // Match PT symbol or underlying asset as collateral
-        if (collateralSymbol.includes(marketName) || collateralSymbol.includes('PT-' + marketName)) {
-            const metrics = calculateLoopMetrics(ptFixedApy, morphoMarket.ltv, morphoMarket.borrowRate);
-
-            // Only return if APY boost is meaningful (>= 1.5%)
-            if (metrics.apyBoost >= 1.5) {
-                return {
-                    platform: morphoMarket.platform,
-                    collateralSymbol: morphoMarket.collateralSymbol,
-                    borrowSymbol: morphoMarket.loanSymbol,
-                    ...metrics
                 };
             }
         }
@@ -1398,12 +1140,6 @@ async function fetchMarkets(chainId = 1) {
     refreshBtn?.classList.add('loading');
     marketsContainer.innerHTML = '<div class="loading">Loading markets...</div>';
 
-    // Fetch lending data in parallel with market data
-    const lendingPromises = Promise.allSettled([
-        fetchAaveReserves(parseInt(chainId)),
-        fetchMorphoMarkets([parseInt(chainId)])
-    ]);
-
     try {
         const apiUrl = `${API_BASE}/v1/markets/all?isActive=true&chainId=${chainId}`;
         let response = null;
@@ -1451,12 +1187,6 @@ async function fetchMarkets(chainId = 1) {
         }
 
         console.log(`Loaded ${markets.length} markets`);
-
-        // Get lending data results
-        const lendingResults = await lendingPromises;
-        const aaveReserves = lendingResults[0].status === 'fulfilled' ? lendingResults[0].value : [];
-        const morphoMarkets = lendingResults[1].status === 'fulfilled' ? lendingResults[1].value : [];
-        console.log(`Loaded ${aaveReserves.length} Aave reserves, ${morphoMarkets.length} Morpho markets`);
 
         // Store raw market data for watermark checking
         const rawMarkets = [...markets];
@@ -1550,9 +1280,7 @@ async function fetchMarkets(chainId = 1) {
             // Find loop opportunity for this market
             const loopOpportunity = findLoopOpportunity(
                 { ...market, ptPrice, days },
-                parseInt(chainId),
-                aaveReserves,
-                morphoMarkets
+                parseInt(chainId)
             );
 
             return {
