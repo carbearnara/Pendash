@@ -1,8 +1,36 @@
-import { kv } from '@vercel/kv';
+import { neon } from '@neondatabase/serverless';
 
 const PENDLE_API = 'https://api-v2.pendle.finance/core/v2';
-const CACHE_TTL = 60 * 60 * 24 * 7; // 7 days in KV
 const MAX_HISTORY_DAYS = 180;
+
+// Initialize database connection
+const sql = neon(process.env.DATABASE_URL);
+
+// Ensure table exists (runs once on cold start)
+let tableInitialized = false;
+async function ensureTable() {
+    if (tableInitialized) return;
+    try {
+        await sql`
+            CREATE TABLE IF NOT EXISTS historical_data (
+                id SERIAL PRIMARY KEY,
+                chain_id INTEGER NOT NULL,
+                market_address TEXT NOT NULL,
+                data JSONB NOT NULL,
+                last_timestamp TIMESTAMPTZ,
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(chain_id, market_address)
+            )
+        `;
+        await sql`
+            CREATE INDEX IF NOT EXISTS idx_history_lookup
+            ON historical_data(chain_id, market_address)
+        `;
+        tableInitialized = true;
+    } catch (e) {
+        console.error('Table init error:', e.message);
+    }
+}
 
 export default async function handler(req, res) {
     // Enable CORS
@@ -20,21 +48,42 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing chainId or address' });
     }
 
-    const cacheKey = `history:${chainId}:${address.toLowerCase()}`;
+    const chainIdNum = parseInt(chainId);
+    const addressLower = address.toLowerCase();
 
     try {
-        // Get cached data from KV
-        let cached = await kv.get(cacheKey);
-        let cachedData = cached?.data || [];
-        let lastTimestamp = cached?.lastTimestamp || null;
+        await ensureTable();
 
-        // Determine how many days to fetch
-        let daysToFetch = MAX_HISTORY_DAYS;
-        if (lastTimestamp) {
-            const lastDate = new Date(lastTimestamp);
-            const now = new Date();
-            const daysSinceUpdate = Math.ceil((now - lastDate) / (1000 * 60 * 60 * 24));
-            daysToFetch = Math.min(daysSinceUpdate + 1, 14); // Fetch at most 14 days of new data
+        // Get cached data from PostgreSQL
+        const rows = await sql`
+            SELECT data, last_timestamp, updated_at
+            FROM historical_data
+            WHERE chain_id = ${chainIdNum} AND market_address = ${addressLower}
+        `;
+
+        let cachedData = [];
+        let lastTimestamp = null;
+        let updatedAt = null;
+
+        if (rows.length > 0) {
+            cachedData = rows[0].data || [];
+            lastTimestamp = rows[0].last_timestamp;
+            updatedAt = rows[0].updated_at;
+        }
+
+        // Check if cache is fresh (less than 1 hour old)
+        const cacheAge = updatedAt ? (Date.now() - new Date(updatedAt).getTime()) : Infinity;
+        const cacheFresh = cacheAge < 60 * 60 * 1000; // 1 hour
+
+        // If cache is fresh, return it immediately
+        if (cacheFresh && cachedData.length > 0) {
+            return res.status(200).json({
+                results: cachedData,
+                cached: true,
+                dataPoints: cachedData.length,
+                lastUpdated: updatedAt,
+                cacheAge: Math.round(cacheAge / 1000 / 60) + ' minutes'
+            });
         }
 
         // Fetch new data from Pendle API
@@ -76,21 +125,26 @@ export default async function handler(req, res) {
             // Convert back to sorted array
             mergedData = Array.from(dataMap.values())
                 .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-                .slice(-MAX_HISTORY_DAYS); // Keep last N days
+                .slice(-MAX_HISTORY_DAYS);
         } else if (newData.length > 0) {
             mergedData = newData.slice(-MAX_HISTORY_DAYS);
         } else {
             mergedData = cachedData;
         }
 
-        // Update cache if we have new data
+        // Update database if we have new data
         if (newData.length > 0 && mergedData.length > 0) {
             const latestTimestamp = mergedData[mergedData.length - 1]?.timestamp;
-            await kv.set(cacheKey, {
-                data: mergedData,
-                lastTimestamp: latestTimestamp,
-                updatedAt: new Date().toISOString()
-            }, { ex: CACHE_TTL });
+
+            await sql`
+                INSERT INTO historical_data (chain_id, market_address, data, last_timestamp, updated_at)
+                VALUES (${chainIdNum}, ${addressLower}, ${JSON.stringify(mergedData)}, ${latestTimestamp}, NOW())
+                ON CONFLICT (chain_id, market_address)
+                DO UPDATE SET
+                    data = ${JSON.stringify(mergedData)},
+                    last_timestamp = ${latestTimestamp},
+                    updated_at = NOW()
+            `;
         }
 
         // Return data
@@ -98,7 +152,7 @@ export default async function handler(req, res) {
             results: mergedData,
             cached: cachedData.length > 0,
             dataPoints: mergedData.length,
-            lastUpdated: cached?.updatedAt || new Date().toISOString()
+            lastUpdated: new Date().toISOString()
         });
 
     } catch (error) {
