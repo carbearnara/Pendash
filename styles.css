@@ -929,6 +929,74 @@ body {
     margin: 0 4px;
 }
 
+/* Incentive Breakdown Card */
+.incentive-breakdown-card {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.incentive-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.incentive-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.incentive-total {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--loop-color);
+}
+
+.incentive-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.incentive-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.incentive-item.boost {
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px dashed rgba(139, 92, 246, 0.4);
+}
+
+.incentive-icon {
+    font-size: 14px;
+}
+
+.incentive-label {
+    color: var(--text-secondary);
+}
+
+.incentive-value {
+    font-weight: 600;
+    color: var(--success-color);
+}
+
+.incentive-item.boost .incentive-value {
+    color: #a78bfa;
+}
+
 /* Calculator Grid */
 .calculator-grid {
     display: grid;

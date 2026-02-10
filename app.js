@@ -1292,22 +1292,53 @@ async function fetchMarkets(chainId = 1, forceRefresh = false) {
             const lpRewardApy = (details.lpRewardApy || market.lpRewardApy || 0) * 100;
             const pointMultipliers = market.pointMultipliers || details.pointMultipliers || [];
 
-            // Market has incentives if: reward tokens exist, or aggregatedApy > impliedApy, or has point multipliers
+            // Extract detailed incentive breakdown from API
+            const pendleApy = (details.pendleApy || market.pendleApy || 0) * 100;
+            const underlyingRewardApy = (details.underlyingRewardApy || market.underlyingRewardApy || 0) * 100;
+            const underlyingInterestApy = (details.underlyingInterestApy || market.underlyingInterestApy || 0) * 100;
+            const voterApy = (details.voterApy || market.voterApy || 0) * 100;
+            const maxBoostedApy = (details.maxBoostedApy || market.maxBoostedApy || 0) * 100;
+
+            // Market has incentives if: reward tokens exist, PENDLE incentives, external rewards, or has point multipliers
             const hasIncentives = rewardTokens.length > 0 ||
                                   lpRewardApy > 0.1 ||
+                                  pendleApy > 0.1 ||
+                                  underlyingRewardApy > 0.1 ||
                                   pointMultipliers.length > 0 ||
                                   (aggregatedApy > impliedApy + 0.5);
 
+            // Build detailed incentive breakdown
+            const incentiveBreakdown = {
+                pendleApy,           // PENDLE co-incentives
+                underlyingRewardApy, // External rewards (USDT, ynRWAx, etc.)
+                underlyingInterestApy, // Base interest
+                lpRewardApy,         // LP-specific rewards
+                voterApy,            // vePENDLE voter APY
+                maxBoostedApy,       // Max with vePENDLE boost
+                totalIncentiveApy: pendleApy + underlyingRewardApy + lpRewardApy,
+                hasBoost: maxBoostedApy > aggregatedApy + 0.5,
+                boostPotential: maxBoostedApy > 0 ? maxBoostedApy - aggregatedApy : 0
+            };
+
             // Get incentive details for tooltip
             const incentiveDetails = [];
+            if (pendleApy > 0.1) {
+                incentiveDetails.push(`+${formatPercent(pendleApy)} PENDLE`);
+            }
+            if (underlyingRewardApy > 0.1) {
+                incentiveDetails.push(`+${formatPercent(underlyingRewardApy)} external rewards`);
+            }
             if (rewardTokens.length > 0) {
                 incentiveDetails.push(`${rewardTokens.length} reward token${rewardTokens.length > 1 ? 's' : ''}`);
             }
             if (pointMultipliers.length > 0) {
                 incentiveDetails.push('Points campaign');
             }
-            if (lpRewardApy > 0.1) {
+            if (lpRewardApy > 0.1 && pendleApy < 0.1) {
                 incentiveDetails.push(`+${formatPercent(lpRewardApy)} LP rewards`);
+            }
+            if (incentiveBreakdown.hasBoost) {
+                incentiveDetails.push(`Up to +${formatPercent(incentiveBreakdown.boostPotential)} with vePENDLE`);
             }
 
             // Detect if yield is purely points-based (0 underlying but positive implied)
@@ -1380,7 +1411,9 @@ async function fetchMarkets(chainId = 1, forceRefresh = false) {
                 lpApy,
                 aggregatedApy,
                 isPurePoints,
-                zeroYieldReason
+                zeroYieldReason,
+                incentiveBreakdown,
+                voterApy
             };
         }).filter(m => m.days > 0);
 
@@ -1715,6 +1748,67 @@ function populateCalculatorFromMarket(market, chainId) {
         } else if (loopLinks) {
             loopLinks.style.display = 'none';
         }
+    }
+
+    // Populate incentive breakdown card
+    const incentiveCard = document.getElementById('incentive-breakdown-card');
+    if (incentiveCard && market.hasIncentives && market.incentiveBreakdown) {
+        const breakdown = market.incentiveBreakdown;
+        incentiveCard.style.display = 'block';
+
+        // Update total incentive APY
+        const totalEl = document.getElementById('incentive-total-apy');
+        if (totalEl) {
+            totalEl.textContent = `+${formatPercent(breakdown.totalIncentiveApy)}`;
+        }
+
+        // PENDLE co-incentives
+        const pendleItem = document.getElementById('incentive-pendle');
+        const pendleApy = document.getElementById('incentive-pendle-apy');
+        if (pendleItem && breakdown.pendleApy > 0.1) {
+            pendleItem.style.display = 'flex';
+            if (pendleApy) pendleApy.textContent = `+${formatPercent(breakdown.pendleApy)}`;
+        } else if (pendleItem) {
+            pendleItem.style.display = 'none';
+        }
+
+        // External rewards
+        const externalItem = document.getElementById('incentive-external');
+        const externalApy = document.getElementById('incentive-external-apy');
+        if (externalItem && breakdown.underlyingRewardApy > 0.1) {
+            externalItem.style.display = 'flex';
+            if (externalApy) externalApy.textContent = `+${formatPercent(breakdown.underlyingRewardApy)}`;
+        } else if (externalItem) {
+            externalItem.style.display = 'none';
+        }
+
+        // LP rewards
+        const lpItem = document.getElementById('incentive-lp-rewards');
+        const lpApy = document.getElementById('incentive-lp-apy');
+        if (lpItem && breakdown.lpRewardApy > 0.1) {
+            lpItem.style.display = 'flex';
+            if (lpApy) lpApy.textContent = `+${formatPercent(breakdown.lpRewardApy)}`;
+        } else if (lpItem) {
+            lpItem.style.display = 'none';
+        }
+
+        // Points campaign
+        const pointsItem = document.getElementById('incentive-points');
+        if (pointsItem) {
+            pointsItem.style.display = (market.pointMultipliers?.length > 0 || market.isPurePoints) ? 'flex' : 'none';
+        }
+
+        // vePENDLE boost potential
+        const boostItem = document.getElementById('incentive-boost');
+        const boostApy = document.getElementById('incentive-boost-apy');
+        if (boostItem && breakdown.hasBoost && breakdown.boostPotential > 0.5) {
+            boostItem.style.display = 'flex';
+            if (boostApy) boostApy.textContent = `+${formatPercent(breakdown.boostPotential)}`;
+        } else if (boostItem) {
+            boostItem.style.display = 'none';
+        }
+    } else if (incentiveCard) {
+        incentiveCard.style.display = 'none';
     }
 
     if (compareBanner) {
@@ -3134,6 +3228,7 @@ function initEventListeners() {
         document.getElementById('compare-market-banner').style.display = 'none';
         document.getElementById('history-card').style.display = 'none';
         document.getElementById('loop-oracle-section').style.display = 'none';
+        document.getElementById('incentive-breakdown-card').style.display = 'none';
         clearUrlMarket();
         updateCalculator();
         updateCompareCalculator();
