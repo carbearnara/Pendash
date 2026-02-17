@@ -1504,7 +1504,7 @@ function renderMarkets() {
 
     // Sort
     filtered.sort((a, b) => {
-        const dir = sortDirection === 'asc' ? 1 : -1;
+        const dir = sortDirection === 'desc' ? 1 : -1;
         switch (sortBy) {
             case 'tvl': return dir * ((b.tvl || 0) - (a.tvl || 0));
             case 'lpApy': return dir * ((b.lpApy || 0) - (a.lpApy || 0));
