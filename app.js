@@ -610,7 +610,6 @@ async function fetchOnChainWatermark(market, chainId) {
 let markets = [];
 let selectedMarket = null;
 let comparisonChart = null;
-let legendFilters = { pt: true, yt: true, lp: true, loop: true, neutral: true, watermark: true };
 let sortDirection = 'desc'; // 'desc' or 'asc'
 let currentSortColumn = 'underlyingApy';
 
@@ -1495,21 +1494,13 @@ function renderMarkets() {
         filtered = filtered.filter(m => m.isPurePoints);
     } else if (signalFilter === 'real-yield') {
         filtered = filtered.filter(m => !m.isPurePoints && m.underlyingApyPercent > 0.5);
+    } else if (signalFilter === 'neutral') {
+        filtered = filtered.filter(m => !m.watermarkStatus?.belowWatermark && !m.loopOpportunity && !isLpOpportunity(m) && m.signal.type !== 'pt' && m.signal.type !== 'yt');
     } else if (signalFilter === 'below-watermark') {
         filtered = filtered.filter(m => m.watermarkStatus?.belowWatermark);
     } else if (signalFilter === 'loop-opportunity') {
         filtered = filtered.filter(m => m.loopOpportunity);
     }
-
-    // Filter by legend buttons
-    filtered = filtered.filter(m => {
-        if (m.watermarkStatus?.belowWatermark) return legendFilters.watermark;
-        if (m.loopOpportunity) return legendFilters.loop !== false; // Show loop if filter is not false
-        if (isLpOpportunity(m)) return legendFilters.lp;
-        if (m.signal.type === 'pt') return legendFilters.pt;
-        if (m.signal.type === 'yt') return legendFilters.yt;
-        return legendFilters.neutral;
-    });
 
     // Sort
     filtered.sort((a, b) => {
@@ -3121,14 +3112,6 @@ function initEventListeners() {
             searchInput.parentElement?.classList.remove('has-value');
         }
 
-        // Reset legend filters
-        Object.keys(legendFilters).forEach(key => {
-            legendFilters[key] = true;
-        });
-        document.querySelectorAll('.legend-btn').forEach(btn => {
-            btn.classList.add('active');
-        });
-
         // Switch to markets tab and refresh
         switchTab('markets');
         renderMarkets();
@@ -3177,45 +3160,6 @@ function initEventListeners() {
         }
     });
 
-    // Legend filter buttons
-    document.querySelectorAll('.legend-btn').forEach(btn => {
-        // Single click: toggle this category
-        btn.addEventListener('click', () => {
-            const filter = btn.dataset.filter;
-            legendFilters[filter] = !legendFilters[filter];
-            btn.classList.toggle('active', legendFilters[filter]);
-            renderMarkets();
-        });
-
-        // Double click: isolate this category (show only this one)
-        btn.addEventListener('dblclick', (e) => {
-            e.preventDefault();
-            const filter = btn.dataset.filter;
-
-            // Check if this is the only active filter
-            const activeFilters = Object.entries(legendFilters).filter(([k, v]) => v);
-            const isAlreadyIsolated = activeFilters.length === 1 && activeFilters[0][0] === filter;
-
-            if (isAlreadyIsolated) {
-                // If already isolated, show all
-                Object.keys(legendFilters).forEach(key => {
-                    legendFilters[key] = true;
-                });
-            } else {
-                // Isolate: disable all, enable only this one
-                Object.keys(legendFilters).forEach(key => {
-                    legendFilters[key] = (key === filter);
-                });
-            }
-
-            // Update button states
-            document.querySelectorAll('.legend-btn').forEach(b => {
-                b.classList.toggle('active', legendFilters[b.dataset.filter]);
-            });
-
-            renderMarkets();
-        });
-    });
     document.getElementById('refresh-markets')?.addEventListener('click', () => {
         const chainId = document.getElementById('chain-filter')?.value || 1;
         fetchMarkets(chainId, true); // Force refresh

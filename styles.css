@@ -506,59 +506,6 @@ body {
     to { transform: rotate(360deg); }
 }
 
-/* Market Legend - Clickable Filter Buttons */
-.market-legend {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-}
-
-.legend-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 20px;
-    color: var(--text-secondary);
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.legend-btn:hover {
-    border-color: var(--border-hover);
-}
-
-.legend-btn.active {
-    background: var(--bg-card-hover);
-    border-color: var(--border-hover);
-    color: var(--text-primary);
-}
-
-.legend-btn:not(.active) {
-    opacity: 0.5;
-}
-
-.legend-btn:not(.active) .signal-dot {
-    opacity: 0.3;
-}
-
-.signal-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-}
-
-.signal-dot.pt-signal { background: var(--pt-color); }
-.signal-dot.yt-signal { background: var(--yt-color); }
-.signal-dot.lp-signal { background: var(--lp-color); }
-.signal-dot.loop-signal { background: var(--loop-color); }
-.signal-dot.neutral-signal { background: var(--text-muted); }
-.signal-dot.watermark-signal { background: var(--loss-color); }
-
 /* Markets Table Header */
 .markets-table-header {
     display: grid;
@@ -2130,7 +2077,6 @@ input[type="range"]::-webkit-slider-thumb {
     .filter-group select { width: 100%; }
     .search-group { max-width: none; }
     .refresh-btn { margin-left: 0; }
-    .market-legend { flex-direction: column; gap: 8px; }
     .section-header { flex-direction: column; }
     .nav-link-btn { align-self: flex-start; }
 }
